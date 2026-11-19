@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#070809" />
+<title>电梯公寓大逃杀 2</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+
+  <!-- 左上：时间 / 楼层 / 存活 -->
+  <div id="hud">
+    <div class="row1">
+      <span id="clock">3:00</span>
+      <span class="sep">/</span>
+      <span id="floorNo">1F</span>
+    </div>
+    <div class="row2">
+      <span class="tag">存活</span><b id="aliveNo">3</b>
+      <span class="stam"><i id="staminaBar"></i></span>
+    </div>
+  </div>
+
+  <div id="hint"></div>
+  <div id="flashMsg"></div>
+
+  <!-- 轿厢面板 -->
+  <div id="carPanel" class="hidden">
+    <div id="carPanelTitle">C 梯</div>
+    <div id="carFloors"></div>
+    <div class="carDoors">
+      <button id="carDoorOpen">开门</button>
+      <button id="carDoorClose">关门</button>
+      <button id="carExit">出去</button>
+    </div>
+  </div>
+
+  <!-- 触屏 -->
+  <div id="joy" class="touchonly"><i id="knob"></i></div>
+  <div id="btns" class="touchonly">
+    <button class="tb" data-act="sprint">跑</button>
+    <button class="tb" data-act="interact">用</button>
+    <button class="tb" data-act="up">上</button>
+    <button class="tb" data-act="down">下</button>
+  </div>
+</div>
+
+<!-- 死亡 / 结算 -->
+<div id="overlay" class="hidden">
+  <div id="overlayCard"></div>
+</div>
+
+<!-- 暂停 -->
+<div id="pause" class="hidden">
+  <div class="pauseCard">
+    <div class="pauseTitle">暂 停</div>
+    <div class="pauseKeys">
+      <div><b>WASD</b> 移动 · <b>Shift</b> 跑</div>
+      <div><b>E</b> 推门 / 呼梯 · 楼梯间里 <b>W/S</b> 上下楼</div>
+      <div><b>F</b> 手电 · <b>M</b> 静音 · <b>Esc</b> 继续</div>
+      <div>鼠标点地面走过去，点门推门</div>
+    </div>
+    <div class="pauseBtns">
+      <button id="pauseResume" class="btn primary">继续</button>
+      <button id="pauseRestart" class="btn">重新开始</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/geom.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/world.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render.js"></script>
+<script src="js/input.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
