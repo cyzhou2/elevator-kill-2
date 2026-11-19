@@ -184,6 +184,13 @@ var World = (function () {
     if (!ok) {
       for (var j = 0; j < G.connectors.length; j++) if (Geom.inRect(G.connectors[j], x, y, -0.002)) { ok = true; break; }
     }
+    if (!ok) {
+      for (var m = 0; m < W.elevators.length; m++) {
+        var em = W.elevators[m];
+        if (!carOpenAt(em, floor)) continue;
+        if (inCarRect(em.id, x, y, -r * 0.4)) { ok = true; break; }
+      }
+    }
     if (!ok) return false;
     var walls = wallsAt(floor);
     for (var k = 0; k < walls.length; k++) if (Geom.circleRect(x, y, r, walls[k])) return false;
@@ -238,7 +245,7 @@ var World = (function () {
     for (var i = 0; i < W.elevators.length; i++) {
       var e = W.elevators[i];
       if (!carOpenAt(e, a.floor)) continue;
-      if (inCarRect(e.id, a.x, a.y, r * 0.2)) {
+      if (inCarRect(e.id, a.x, a.y, -r * 0.35)) {
         boardCar(a, e);
         return;
       }
@@ -436,8 +443,16 @@ var World = (function () {
     if (W.over) return;
     W.time += dt;
 
-    /* 玩家楼层 */
-    if (W.player && W.player.space === "floor") W.floor = W.player.floor;
+    /* 玩家楼层 / 正在渲染的楼层 */
+    if (W.player) {
+      if (W.player.space === "floor") { W.floor = W.player.floor; W.viewFloor = W.player.floor; }
+      else if (W.player.space === "car") {
+        var pc = carById(W.player.carId);
+        if (pc) { W.floor = Math.round(pc.floor); W.viewFloor = Math.round(pc.floor); }
+      } else if (W.player.space === "stair" && W.player.stair) {
+        W.viewFloor = W.player.stair.to;
+      }
+    }
 
     /* 门：自动关 */
     for (var f = 1; f <= Cfg.FLOORS; f++) {

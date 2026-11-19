@@ -120,8 +120,14 @@ var Geom = (function () {
       walk: [corridor, hall, stairA, stairB],
       walls: walls,
       elev: {
-        C: { gap: gapC, car: carC, cx: cCX, call: callC, doorW: doorW },
-        D: { gap: gapD, car: carD2, cx: dCX, call: callD, doorW: doorW }
+        C: {
+          gap: gapC, car: carC, cx: cCX, doorW: doorW,
+          panel: rect(cCX - doorW / 2 - 0.72, -hd + 0.06, 0.46, 0.30)
+        },
+        D: {
+          gap: gapD, car: carD2, cx: dCX, doorW: doorW,
+          panel: rect(dCX + doorW / 2 + 0.26, -hd + 0.06, 0.46, 0.30)
+        }
       },
       lamps: lamps,
       /* 楼梯口在走廊上的落点（换层后站这儿） */

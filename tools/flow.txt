@@ -1,0 +1,66 @@
+﻿/* 娴忚鍣ㄩ噷璺戜竴閬嶏細鐐瑰湴闈?鈫?鍛兼 鈫?绛夐棬 鈫?杩涙 鈫?鎸夊眰 鈫?鍒扮珯 鈫?鍑烘
+ * 鐢ㄦ硶锛氭妸杩欐枃浠跺唴瀹圭矘鍒?DevTools console锛屾垨鍦?Playwright 閲?evaluate銆?*/
+(async () => {
+  const g = window.EK2, w = g.world, p = w.player, G = w.geom;
+  const stage = document.getElementById("stage");
+  const rect0 = stage.getBoundingClientRect();
+  const view = () => window.Render.view;
+  const toScreen = (x, y) => {
+    const v = view(), dx = (x - v.cx) * v.s, dy = (y - v.cy) * v.s;
+    if (v.rotate) return { x: rect0.left + v.ox + dy, y: rect0.top + v.oy - dx };
+    return { x: rect0.left + v.ox + dx, y: rect0.top + v.oy + dy };
+  };
+  const click = (x, y, label) => {
+    const q = toScreen(x, y);
+    stage.dispatchEvent(new MouseEvent("click", { clientX: q.x, clientY: q.y, bubbles: true }));
+    log.push("鐐瑰嚮 " + (label || (x.toFixed(1) + "," + y.toFixed(1))));
+  };
+  const step = (n) => { for (let i = 0; i < n; i++) g.step(0.05); };
+  const waitFor = (fn, frames, label) => {
+    for (let i = 0; i < frames; i++) { g.step(0.05); if (fn()) { log.push("绛夊埌浜? " + label); return true; } }
+    log.push("瓒呮椂: " + label);
+    return false;
+  };
+  const log = [];
+  const C = () => w.elevators[0], D = () => w.elevators[1];
+  const stateLine = () => w.elevators.map(e => e.id + "@" + e.floor.toFixed(1) + (e.doorsOpen ? "寮€" : e.state === "moving" ? "琛? : "鍏?)).join(" ");
+
+  /* 1. 璧板埌鐢垫鍘?*/
+  click(G.hallCX, G.hallY0 + 1.0, "鐢垫鍘?);
+  waitFor(() => p.y < -0.2, 200, "杩涚數姊巺");
+  log.push("浣嶇疆 " + p.x.toFixed(2) + "," + p.y.toFixed(2));
+
+  /* 2. 鎸夊懠姊?*/
+  click(G.elev.C.call.x, G.elev.C.call.y, "C 鍛兼");
+  waitFor(() => w.elevators.some(e => Math.abs(e.floor - p.floor) < 0.06 && e.doorsOpen), 900, "鏈変竴閮ㄩ棬寮€");
+  log.push("闂ㄥ紑浜? " + stateLine());
+
+  /* 3. 璧拌繘杞垮帰 */
+  const car = G.elev.C.car;
+  click(car.x + car.w / 2, car.y + car.h / 2, "杞垮帰");
+  waitFor(() => p.space === "car", 200, "杩涜娇鍘?);
+  log.push("杩涙: " + p.space + "/" + p.carId);
+
+  /* 4. 鎸?7 灞?*/
+  const btn = [...document.querySelectorAll(".cf")].find(b => b.textContent === "7");
+  if (btn) btn.click();
+  step(4);
+  log.push("鎸変笅 7F锛孋 姊?calls=" + [...C().calls].join(","));
+
+  /* 5. 绛夊埌 7 灞傚紑闂?*/
+  waitFor(() => C().doorsOpen && Math.abs(C().floor - 7) < 0.06, 1200, "鍒?7F 寮€闂?);
+  log.push("鍒拌揪: " + stateLine() + " 鐜╁ " + p.space);
+
+  /* 6. 鍑洪棬锛堢┖鏍硷級 */
+  document.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }));
+  step(4);
+  log.push("鍑洪棬鍚? " + p.space + " floor=" + p.floor + " viewFloor=" + w.viewFloor);
+
+  /* 7. 璧板埌妤兼闂达細鐐规ゼ姊棬 */
+  click(G.stairDoorA.rect.x + G.stairDoorA.rect.w / 2, G.stairDoorA.rect.y + G.stairDoorA.rect.h / 2, "妤兼闂ˋ");
+  waitFor(() => w.stairDoors[p.floor].A.amt > 0.5, 120, "妤兼闂ㄦ墦寮€");
+  log.push("闂?A 鎵撳紑 amt=" + w.stairDoors[p.floor].A.amt.toFixed(2));
+
+  return { log, version: window.CFG.VERSION };
+})();
+
