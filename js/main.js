@@ -91,6 +91,8 @@
     if (best) World.playerCallElevator(best.id);
   }
 
+  function stairUp() { World.playerTryStairs(1); }
+  function stairDown() { World.playerTryStairs(-1); }
   function callUp() { World.playerCallElevator(1); }
   function callDown() { World.playerCallElevator(-1); }
 
@@ -295,7 +297,7 @@
       resume: function () { paused = false; UI.showPause(false); },
       restart: function () { boot(); },
       pressCarFloor: function (f) { World.playerPressCarFloor(f); },
-    callUp: callUp, callDown: callDown,
+    stairUp: stairUp, stairDown: stairDown, callUp: callUp, callDown: callDown,
       openDoor: function () { World.playerToggleCarDoor(true); },
       closeDoor: function () { World.playerToggleCarDoor(false); },
       exitCar: function () { World.playerExitCar(); }

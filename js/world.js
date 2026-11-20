@@ -354,84 +354,211 @@ var World = (function () {
     else { W.hallUp[f] = false; W.hallDown[f] = false; }
   }
 
-  function openDoors(e, f) {
+  function openDoors(e, f, dir) {
+    var d = dir === undefined ? e.dir : dir;
     e.floor = f;
     e.state = "opening";
     e.timer = Cfg.ELEV.doorOpenSec;
     e.doorsOpen = false;
-    e.openedFor = dir2(e);
-    clearFloorCalls(e, f, e.dir);
+    e.openedFor = d || 1;
+    clearFloorCalls(e, f, d);
+    /* 反方向这层还亮着 → 关门后补开一次（一代的「补开门」） */
+    if (d > 0) e.mustReopen = !!W.hallDown[f];
+    else if (d < 0) e.mustReopen = !!W.hallUp[f];
+    else e.mustReopen = false;
     emitNoise(f, e.cx, G.hallY0 + 0.5, 4.0, "elev");
   }
   function dir2(e) { return e.dir || 1; }
 
+  /** 停靠判定：轿厢选层，或同方向呼梯；dir=0 时任何呼梯都算 */
+  function wantsStopAt(e, f, dir) {
+    if (e.calls.has(f)) return true;
+    if (dir > 0) return !!W.hallUp[f];
+    if (dir < 0) return !!W.hallDown[f];
+    return !!(W.hallUp[f] || W.hallDown[f]);
+  }
+
+  /** 当前方向上、从本层（含）起还要停的层，按行进顺序排好 —— 事件队列 */
+  function queueFor(e, dir) {
+    if (!dir) return [];
+    var list = [];
+    for (var f = 1; f <= Cfg.FLOORS; f++) {
+      if (dir > 0 ? f < e.floor - 0.05 : f > e.floor + 0.05) continue;
+      if (wantsStopAt(e, f, dir)) list.push(f);
+    }
+    list.sort(function (a, b) { return dir > 0 ? a - b : b - a; });
+    return list;
+  }
+
+  /**
+   * 只决定「下一步干什么」，不负责移动。
+   * 顺序和一代一致：本层该停→开门；正方向有活→继续；反方向有活→整层掉头；
+   * 两边都空但还有没响应的呼梯→朝最近那层出发；真没有→待机（不在整层就先靠层）。
+   */
   function planElevator(e) {
-    if (e.dir !== 0 && stopsAhead(e, e.dir).length) { e.state = "moving"; return; }
-    if (e.dir !== 0 && stopsAhead(e, -e.dir).length) { e.dir = -e.dir; e.state = "moving"; return; }
+    var at = Math.round(e.floor);
+    var onInt = Math.abs(e.floor - at) < 0.02;
+
+    /* 1) 就在本层且该停 */
+    if (onInt && wantsStopAt(e, at, e.dir)) { e.floor = at; openDoors(e, at, e.dir); return; }
+
+    /* 2) 正方向还有活 → 方向不变继续跑（延长线上冒出新任务会自动续上） */
+    if (e.dir !== 0 && queueFor(e, e.dir).length) { e.state = "moving"; e.settleDir = e.dir; return; }
+
+    /* 3) 正方向空了、反方向有活 → 只在整层掉头 */
+    if (e.dir !== 0 && queueFor(e, -e.dir).length) {
+      if (onInt) {
+        e.floor = at;
+        e.dir = -e.dir;
+        e.settleDir = e.dir;
+        e.state = "moving";
+      } else {
+        e.state = "moving";
+      }
+      return;
+    }
+
+    /* 4) 两个方向都空，但还有没人响应的呼梯 → 立刻朝最近那层出发 */
     var n = nearestCall(e);
     if (n != null) {
-      if (Math.abs(n - e.floor) < 0.06) { openDoors(e, n); return; }
+      if (Math.abs(n - e.floor) < 0.06) { openDoors(e, n, e.dir); return; }
       e.dir = n > e.floor ? 1 : -1;
+      e.settleDir = e.dir;
       e.state = "moving";
       return;
     }
-    e.dir = 0;
-    e.state = "idle";
+
+    /* 5) 真没任务：整层待机；不在整层就沿原方向靠到最近整层 */
+    if (onInt) {
+      e.floor = at;
+      e.dir = 0;
+      e.state = "idle";
+    } else {
+      e.dir = e.settleDir || (e.floor - Math.floor(e.floor) >= 0.5 ? 1 : -1);
+      e.state = "moving";
+    }
+  }
+
+  /** 逐层推进：每跨过一层就问一次要不要停 */
+  function elevatorMove(e, dt) {
+    var remain = (1 / Cfg.ELEV.secPerFloor) * dt;
+    var guard = 0;
+    while (remain > 1e-9 && guard++ < 64) {
+      if (e.dir === 0) break;
+      var nextInt = e.dir > 0
+        ? Math.floor(e.floor + 1e-9) + 1
+        : Math.ceil(e.floor - 1e-9) - 1;
+
+      /* 到端点 */
+      if (nextInt < 1 || nextInt > Cfg.FLOORS) {
+        e.floor = e.dir > 0 ? Cfg.FLOORS : 1;
+        e.dir = -e.dir;
+        if (wantsStopAt(e, e.floor, e.dir)) { openDoors(e, e.floor, e.dir); return; }
+        e.dir = 0;
+        e.state = "idle";
+        return;
+      }
+
+      var gap = Math.abs(nextInt - e.floor);
+      if (remain >= gap - 1e-9) {
+        remain -= gap;
+        e.floor = nextInt;
+        /* 到了整层：该停就停，绝不开过去 */
+        if (wantsStopAt(e, nextInt, e.dir)) { openDoors(e, nextInt, e.dir); return; }
+      } else {
+        e.floor += e.dir * remain;
+        remain = 0;
+      }
+    }
   }
 
   function updateElevator(e, dt) {
     switch (e.state) {
-      case "idle":
-        if (anyCall(e)) planElevator(e);
-        break;
-      case "moving": {
-        if (e.dir === 0) { planElevator(e); break; }
-        /* 已经压在整层、这层又有人叫 → 立刻开门，不许多跑 */
-        var atInt0 = Math.round(e.floor);
-        if (Math.abs(e.floor - atInt0) < 0.02 && hasCall(e, atInt0, e.dir)) {
-          e.floor = atInt0;
-          openDoors(e, atInt0);
-          break;
-        }
-        var nextInt = e.dir > 0 ? Math.ceil(e.floor - 1e-6) : Math.floor(e.floor + 1e-6);
-        if (Math.abs(nextInt - e.floor) < 1e-3) nextInt += e.dir;
-        nextInt = clamp(nextInt, 1, Cfg.FLOORS);
-        var step = (1 / Cfg.ELEV.secPerFloor) * dt;
-        var d = nextInt - e.floor;
-        if (Math.abs(d) <= step) {
-          e.floor = nextInt;
-          if (hasCall(e, nextInt, e.dir)) {
-            openDoors(e, nextInt);
-          } else if ((e.dir > 0 && nextInt >= Cfg.FLOORS) || (e.dir < 0 && nextInt <= 1)) {
-            e.dir = -e.dir;
-            if (!stopsAhead(e, e.dir).length && !anyCall(e)) { e.dir = 0; e.state = "idle"; }
-          }
-        } else {
-          e.floor += e.dir * step;
-        }
-        break;
-      }
       case "opening":
         e.timer -= dt;
         e.openAmt = Math.min(1, e.openAmt + dt / Cfg.ELEV.doorOpenSec);
         if (e.timer <= 0) { e.state = "open"; e.doorsOpen = true; e.openAmt = 1; e.timer = Cfg.ELEV.doorHoldSec; }
         break;
+
       case "open":
         e.openAmt = 1;
         e.timer -= dt;
         if (e.timer <= 0) { e.state = "closing"; e.timer = Cfg.ELEV.doorCloseSec; }
         break;
-      case "closing":
+
+      case "closing": {
         e.doorsOpen = false;
         e.timer -= dt;
         e.openAmt = Math.max(0, e.openAmt - dt / Cfg.ELEV.doorCloseSec);
-        /* 关门途中这一层又被叫了 → 重新开门 */
         var cf = Math.round(e.floor);
-        if (Math.abs(e.floor - cf) < 0.06 && hasCall(e, cf, e.dir) && e.openAmt < 0.6) {
-          e.state = "opening"; e.timer = Cfg.ELEV.doorOpenSec;
+        var atCf = Math.abs(e.floor - cf) < 0.06;
+        /* 关门途中这层又被叫了 → 重新开门 */
+        if (atCf && wantsStopAt(e, cf, e.dir) && e.openAmt < 0.6) {
+          /* 必须走 openDoors：它才会把呼梯消掉，否则会一直开开合合 */
+          openDoors(e, cf, e.dir);
+          break;
         }
-        if (e.timer <= 0) { e.openAmt = 0; planElevator(e); }
+        if (e.timer <= 0) {
+          e.openAmt = 0;
+          /* 反方向这层还亮着 → 补开一次门，把两个方向都服务掉 */
+          if (atCf && e.mustReopen && wantsStopAt(e, cf, -e.dir)) {
+            e.mustReopen = false;
+            openDoors(e, cf, -e.dir);
+            break;
+          }
+          e.mustReopen = false;
+          planElevator(e);
+        }
         break;
+      }
+
+      default: {
+        /* idle / moving：每帧都重算一次（一代就是这么做的） */
+        var at = Math.round(e.floor);
+        var onInt = Math.abs(e.floor - at) < 0.02;
+
+        /* 压在整层且该停 → 先开门，绝不跳过 */
+        if (onInt && e.dir !== 0 && wantsStopAt(e, at, e.dir)) {
+          e.floor = at;
+          openDoors(e, at, e.dir);
+          break;
+        }
+
+        /* 待机：有任务就出发；没有就待机（不在整层先靠层） */
+        if (e.dir === 0) {
+          if (!anyCall(e)) {
+            if (onInt) { e.floor = at; e.state = "idle"; break; }
+            e.dir = e.settleDir || (e.floor - Math.floor(e.floor) >= 0.5 ? 1 : -1);
+            e.state = "moving";
+            elevatorMove(e, dt);
+            break;
+          }
+          planElevator(e);
+          if (e.state !== "moving" || e.dir === 0) break;
+        }
+
+        /* 正方向队列空了 → 整层掉头或待机 */
+        if (queueFor(e, e.dir).length === 0) {
+          if (onInt) {
+            if (queueFor(e, -e.dir).length) {
+              e.floor = at;
+              e.dir = -e.dir;
+              e.settleDir = e.dir;
+            } else {
+              e.floor = at;
+              e.dir = 0;
+              e.state = "idle";
+              if (anyCall(e)) planElevator(e);
+              break;
+            }
+          }
+        }
+
+        e.state = "moving";
+        e.settleDir = e.dir;
+        elevatorMove(e, dt);
+        break;
+      }
     }
   }
 

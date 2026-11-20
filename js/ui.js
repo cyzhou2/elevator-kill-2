@@ -6,14 +6,14 @@
 var UI = (function () {
   var el = {};
   var game = null;
-  var lastHint = "", lastPanel = false, lastFloorTxt = "", lastCallPanel = false;
+  var lastHint = "", lastPanel = false, lastFloorTxt = "", lastCallPanel = false, lastStairPanel = false;
 
   function $(id) { return document.getElementById(id); }
 
   function init(g) {
     game = g;
     ["clock", "floorNo", "aliveNo", "hint", "carPanel", "carPanelTitle", "carFloors",
-      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown",
+      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown",
       "overlay", "overlayCard",
       "pause", "pauseResume", "pauseRestart", "joy", "knob", "staminaBar", "flashMsg"].forEach(function (k) {
       el[k] = $(k);
@@ -25,6 +25,8 @@ var UI = (function () {
     if (el.pauseRestart) el.pauseRestart.onclick = function () { game.restart(); };
     if (el.carExit) el.carExit.onclick = function () { game.exitCar && game.exitCar(); };
     if (el.cpUp) el.cpUp.onclick = function () { game.callUp && game.callUp(); };
+    if (el.stUp) el.stUp.onclick = function () { game.stairUp && game.stairUp(); };
+    if (el.stDown) el.stDown.onclick = function () { game.stairDown && game.stairDown(); };
     if (el.cpDown) el.cpDown.onclick = function () { game.callDown && game.callDown(); };
   }
 
@@ -112,6 +114,17 @@ var UI = (function () {
           btns[i].classList.toggle("here", Math.round(e.floor) === f);
         }
       }
+    }
+
+    /* 楼梯面板（走到楼梯口才出现） */
+    var showStair = !!(W.nearStairs && W.nearStairs());
+    if (showStair !== lastStairPanel) {
+      lastStairPanel = showStair;
+      el.stairPanel.classList.toggle("hidden", !showStair);
+    }
+    if (showStair) {
+      el.stUp.disabled = W.player.floor >= CFG.FLOORS;
+      el.stDown.disabled = W.player.floor <= 1;
     }
 
     /* 呼梯面板 */

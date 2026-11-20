@@ -99,6 +99,29 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 端头限制在 `world.playerCallElevator(dir)` 与 `world.canCall(dir)` 里（1 楼不能下、20 楼不能上）。
 - 面板 UI：`#cpUp` / `#cpDown`，亮起 = 该方向已有人叫；`disabled` = 端头按不了。
 
+## 1.6 电梯核心（v1.4，照搬一代 SCAN）
+
+规则来源：一代 `docs/DESIGN.md` 5.2 与 `src/model/elevator.js`。v2 的实现全在 `js/world.js`：
+
+| 函数 | 作用 |
+| --- | --- |
+| `wantsStopAt(e, f, dir)` | 这一层这一方向要不要停：轿厢选层 or 同方向呼梯（dir=0 时任何呼梯都算） |
+| `queueFor(e, dir)` | 当前方向的事件队列，含本层，按行进顺序排序 |
+| `planElevator(e)` | 只做决策：本层该停→开门 / 正向有活→继续 / 反向有活且整层→掉头 / 都没活→截最近呼梯 / 真没有→待机或靠层 |
+| `elevatorMove(e, dt)` | 逐层推进，**每跨一层都复查一次**，该停就 `openDoors` |
+| `openDoors(e, f, dir)` | 开门并清掉**本方向**的呼梯；反方向还亮着就记 `mustReopen`，关门后补开一次 |
+
+常见改法：
+
+- 电梯太快/太慢：`ELEV.secPerFloor`（秒/层）
+- 门停多久：`ELEV.doorHoldSec`、开合时间 `doorOpenSec/doorCloseSec`
+- 想验证改动没破坏规则：`node tools/elevator-test.js`（11 条用例必须全绿）
+
+## 1.55 楼梯按钮（v1.4）
+
+- `#stairPanel`：`world.nearStairs()` 为真时出现，两个按钮直接调 `World.playerTryStairs(±1)`。
+- 端头禁用靠 `player.floor >= CFG.FLOORS` / `<= 1` 判断。
+
 ## 2. 想改难度：只动这 5 个
 
 ```js
