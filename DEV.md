@@ -122,6 +122,25 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - `#stairPanel`：`world.nearStairs()` 为真时出现，两个按钮直接调 `World.playerTryStairs(±1)`。
 - 端头禁用靠 `player.floor >= CFG.FLOORS` / `<= 1` 判断。
 
+## 1.45 电梯口互动细节（v1.5）
+
+全部在 `js/render.js`：
+
+| 细节 | 位置 | 想调什么 |
+| --- | --- | --- |
+| 到站灯 | `drawElevator` 里 `lampOn` | 亮度/呼吸频率 |
+| 运行箭头 | 显示屏文字 `▲▼◦▪` | 字符 |
+| 开门倒计时 | `e.timer / CFG.ELEV.doorHoldSec` | 改 `ELEV.doorHoldSec` 就会跟着变 |
+| 门缝警示条 | `hazardA`（closing 时闪烁） | 闪烁频率 `world.time*18` |
+| 消防栓/告示牌/地垫 | `bakeProps` 的电梯厅段 | 位置与颜色 |
+
+## 1.46 轿厢内方向键（v1.5）
+
+- DOM：`index.html` 的 `#carPad`，四个 `[data-cm]` 按钮；只在 `player.space === 'car'` 时显示（`ui.js` 里 `showPad`）。
+- 输入：`input.js` 的 `padOn{up,down,left,right}`，在 `poll()` 里直接叠加到主轴，和 WASD/摇杆同一套。
+- 进轿厢时给 `<body>` 加 `inCar` 类，`styles.css` 用它隐藏摇杆（`body.inCar #joy{display:none}`）。
+- 想改键位/大小：`styles.css` 的 `#carPad` 与 `.cpad`。
+
 ## 2. 想改难度：只动这 5 个
 
 ```js

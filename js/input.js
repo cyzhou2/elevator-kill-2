@@ -15,6 +15,7 @@ var Input = (function () {
   var keys = {};
   var joy = { active: false, dx: 0, dy: 0, id: null, cx: 0, cy: 0 };
   var clickTarget = null;     // 世界坐标，用于「点哪走哪」
+  var padOn = { up: false, down: false, left: false, right: false };  // 轿厢内屏幕方向键
   var els = {};
 
   function push(a) { actions.push(a); }
@@ -48,6 +49,22 @@ var Input = (function () {
       var p = Render.toWorld(e.clientX - r.left, e.clientY - r.top);
       clickTarget = p;
       push({ click: p, raw: { x: e.clientX - r.left, y: e.clientY - r.top } });
+    });
+
+    /* 轿厢内方向键（鼠标/触屏都能按） */
+    var padBtns = document.querySelectorAll("[data-cm]");
+    padBtns.forEach(function (b) {
+      var dir = b.dataset.cm;
+      if (!(dir in padOn)) return;
+      var set = function (on) {
+        padOn[dir] = on;
+        b.classList.toggle("on", on);
+      };
+      b.addEventListener("pointerdown", function (e) { e.preventDefault(); set(true); });
+      b.addEventListener("pointerup", function () { set(false); });
+      b.addEventListener("pointerleave", function () { set(false); });
+      b.addEventListener("pointercancel", function () { set(false); });
+      b.addEventListener("contextmenu", function (e) { e.preventDefault(); });
     });
 
     /* 触屏摇杆 */
@@ -113,6 +130,10 @@ var Input = (function () {
     if (keys["KeyW"] || keys["ArrowUp"]) y -= 1;
     if (keys["KeyS"] || keys["ArrowDown"]) y += 1;
     if (joy.active) { x += joy.dx; y += joy.dy; }
+    if (padOn.left) x -= 1;
+    if (padOn.right) x += 1;
+    if (padOn.up) y -= 1;
+    if (padOn.down) y += 1;
     var sp = sprint || !!(keys["ShiftLeft"] || keys["ShiftRight"]);
     return { x: x, y: y, sprint: sp };
   }

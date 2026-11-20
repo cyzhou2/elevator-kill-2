@@ -841,7 +841,7 @@ var World = (function () {
   function panelVisible() {
     var p = W.player;
     if (!p || !p.alive || p.space === "stair") return false;
-    if (p.space === "car") return true;
+    if (p.space === "car") return false;
     var G2 = G;
     if (Geom.inRect(G2.hall, p.x, p.y, 0.1)) return true;
     return dist(p.x, p.y, G2.hallCX, G2.hallY0 + 1.2) < 5.2;

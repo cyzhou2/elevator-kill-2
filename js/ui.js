@@ -6,14 +6,14 @@
 var UI = (function () {
   var el = {};
   var game = null;
-  var lastHint = "", lastPanel = false, lastFloorTxt = "", lastCallPanel = false, lastStairPanel = false;
+  var lastHint = "", lastPanel = false, lastFloorTxt = "", lastCallPanel = false, lastStairPanel = false, lastCarPad = false;
 
   function $(id) { return document.getElementById(id); }
 
   function init(g) {
     game = g;
     ["clock", "floorNo", "aliveNo", "hint", "carPanel", "carPanelTitle", "carFloors",
-      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown",
+      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown", "carPad",
       "overlay", "overlayCard",
       "pause", "pauseResume", "pauseRestart", "joy", "knob", "staminaBar", "flashMsg"].forEach(function (k) {
       el[k] = $(k);
@@ -116,6 +116,14 @@ var UI = (function () {
       }
     }
 
+    /* 轿厢内方向键 */
+    var showPad = !!(W.player && W.player.space === "car");
+    if (showPad !== lastCarPad) {
+      lastCarPad = showPad;
+      el.carPad.classList.toggle("hidden", !showPad);
+      document.body.classList.toggle("inCar", showPad);
+    }
+
     /* 楼梯面板（走到楼梯口才出现） */
     var showStair = !!(W.nearStairs && W.nearStairs());
     if (showStair !== lastStairPanel) {
@@ -157,7 +165,7 @@ var UI = (function () {
     var p = W.player;
     if (!p.alive) return "";
     if (p.space === "stair") return "楼梯上…";
-    if (p.space === "car") return "点右侧楼层键选层 · <b>Space</b> 出门";
+    if (p.space === "car") return "左下方向键走动 · 右侧选层 · <b>Space</b> 出门";
     var g = W.geom;
     if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼";
     if (W.nearDoor && W.nearDoor()) {

@@ -46,6 +46,14 @@
     <button class="stBtn" id="stDown" aria-label="下楼">▼<span>下楼</span></button>
   </div>
 
+  <!-- 轿厢内方向键：一个能"在电梯里挪动"的按钮组 -->
+  <div id="carPad" class="hidden">
+    <button class="cpad" data-cm="up" aria-label="往里走">▲</button>
+    <button class="cpad" data-cm="left" aria-label="往左">◀</button>
+    <button class="cpad" data-cm="right" aria-label="往右">▶</button>
+    <button class="cpad" data-cm="down" aria-label="到门口">▼</button>
+  </div>
+
   <!-- 轿厢面板：11 行 × 2 列，最后一行是开/关门图标 -->
   <div id="carPanel" class="hidden">
     <div id="carPanelTitle">C 梯 · 1F</div>

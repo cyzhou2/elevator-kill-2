@@ -279,3 +279,26 @@ body.in-car #btns { display: none; }
 .stBtn span { font-size: 10px; letter-spacing: 2px; color: #5f6b67; }
 .stBtn:hover:not(:disabled) { color: #e2eae6; border-color: #4d5955; }
 .stBtn:disabled { opacity: .28; cursor: default; }
+
+
+/* ---------- 轿厢内方向键 ---------- */
+#carPad {
+  position: absolute; left: 34px; bottom: 40px;
+  width: 132px; height: 132px; z-index: 9;
+}
+body.inCar #joy { display: none; }
+#carPad .cpad {
+  position: absolute; width: 42px; height: 42px; border-radius: 8px;
+  font: inherit; font-size: 15px; line-height: 1; color: #a9b5b1;
+  background: rgba(16, 21, 20, .92); border: 1px solid #333d3a;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; user-select: none;
+}
+#carPad .cpad.on, #carPad .cpad:active {
+  color: #ffd9a0; border-color: #7a5f31; background: #241d10;
+  box-shadow: 0 0 12px rgba(201,168,106,.45);
+}
+#carPad [data-cm="up"] { left: 45px; top: 0; }
+#carPad [data-cm="down"] { left: 45px; bottom: 0; }
+#carPad [data-cm="left"] { left: 0; top: 45px; }
+#carPad [data-cm="right"] { right: 0; top: 45px; }

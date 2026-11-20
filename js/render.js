@@ -316,6 +316,28 @@ var Render = (function () {
     /* 电梯厅 */
     propBox(c, g.hallX0 + 0.35, g.hallY0 + 0.45, 0.5, 0.42, "#20231f", "#2b2f28"); // 沙发/花盆
     propBox(c, g.hallX1 - 0.85, g.hallY0 + 0.45, 0.5, 0.42, "#20231f", "#2b2f28");
+
+    /* 厅里的墙面小物：消防栓箱（西）、告示牌（东）、地垫 */
+    propBox(c, g.hallX0 + 0.06, g.hallY0 + 1.35, 0.3, 0.62, "#3a2622", "#5a3330");
+    c.fillStyle = "rgba(200,90,80,0.32)";
+    c.fillRect(g.hallX0 + 0.13, g.hallY0 + 1.44, 0.16, 0.06);
+
+    c.fillStyle = "rgba(210,206,190,0.12)";
+    c.fillRect(g.hallX1 - 0.44, g.hallY0 + 1.45, 0.32, 0.46);
+    c.strokeStyle = "rgba(210,206,190,0.22)";
+    c.lineWidth = 0.01;
+    c.strokeRect(g.hallX1 - 0.44, g.hallY0 + 1.45, 0.32, 0.46);
+    c.fillStyle = "rgba(30,34,32,0.55)";
+    for (var li = 0; li < 6; li++) {
+      c.fillRect(g.hallX1 - 0.4, g.hallY0 + 1.52 + li * 0.058, 0.2 - (li % 3) * 0.045, 0.015);
+    }
+
+    /* 门前地垫（踩上去会有更闷的脚步） */
+    c.fillStyle = "rgba(28,32,30,0.55)";
+    c.fillRect(g.hallCX - 1.1, g.hallY0 + 0.55, 2.2, 1.5);
+    c.strokeStyle = "rgba(60,66,62,0.5)";
+    c.lineWidth = 0.014;
+    c.strokeRect(g.hallCX - 1.1, g.hallY0 + 0.55, 2.2, 1.5);
   }
 
   function propBox(c, x, y, w, h, fill, edge) {
