@@ -51,15 +51,19 @@
     if (!p || !p.alive || over) return;
     if (p.space === "stair") return;
 
+    var inStairZone = p.space === "floor" && World.nearStairs();
+
     if (a === "interact") {
       if (p.space === "car") { World.playerToggleCarDoor(true); return; }
-      if (World.nearStairs()) { World.playerTryStairs(1); return; }
+      if (inStairZone) { World.playerTryStairs(1); return; }          // E = 上楼
       if (World.nearDoor()) { World.playerToggleDoor(); return; }
-      if (Geom.inRect(world.geom.hall, p.x, p.y, -0.05)) { World.playerCallElevator(1); return; }
+      if (world.panelVisible()) callNearestCar();
+      return;
     }
     if (a === "interactDown") {
       if (p.space === "car") { World.playerToggleCarDoor(false); return; }
-      if (World.nearStairs()) { World.playerTryStairs(-1); return; }
+      if (inStairZone) { World.playerTryStairs(-1); return; }          // Q = 下楼
+      return;
     }
     if (a === "space") {
       if (p.space === "car") World.playerExitCar();
@@ -74,19 +78,73 @@
     if (a === "mute") { Audio2.setMute(!Audio2.muted); UI.toast(Audio2.muted ? "静音" : "声音已开"); return; }
   }
 
+  /** 叫离你最近的一部梯（只有呼梯面板显示时才允许） */
+  function callNearestCar() {
+    var p = world.player;
+    var best = null, bf = 1e9;
+    for (var i = 0; i < world.elevators.length; i++) {
+      var e = world.elevators[i];
+      var d = Math.abs(e.floor - p.floor) + (e.state === "moving" ? 0.5 : 0);
+      if (d < bf) { bf = d; best = e; }
+    }
+    if (best) World.playerCallElevator(best.id);
+  }
+
+  /** 面板上的 C / D 呼梯 */
+  function callCar(id) {
+    var p = world.player;
+    if (!p || !p.alive || over) return;
+    World.playerCallElevator(id);
+  }
+
   function togglePause() {
     if (over) return;
     paused = !paused;
     UI.showPause(paused);
   }
 
+  function onStageClick(raw, pt) {
+    var p = world.player;
+    if (!p || !p.alive || over) return;
+    /* 轿厢场景：点下半部分 = 走到门口出去 */
+    if (p.space === "car") {
+      var box = $("#stage").getBoundingClientRect();
+      if (raw.y > box.height * 0.72) World.playerExitCar();
+      return;
+    }
+    handleClick(pt);
+  }
+
   function handleClick(pt) {
     var p = world.player;
     if (!p || !p.alive || over) return;
     if (p.space === "stair") return;
-    if (p.space === "car") return;
 
     var g = world.geom;
+
+    /* 轿厢里：点下半部分（门）就出去 */
+    if (p.space === "car") {
+      var cv = $("#stage").getBoundingClientRect();
+      if (pt.y < 0) return;                       // 轿厢场景另算，见 stage 点击
+      return;
+    }
+
+    /* 点电梯井 / 轿厢：开着就进去，关着就走到门口 */
+    for (var i = 0; i < world.elevators.length; i++) {
+      var e = world.elevators[i];
+      var car = e.id === "C" ? g.elev.C.car : g.elev.D.car;
+      var inCarArea = pt.y < g.hallY0 - 0.05 && pt.x > car.x - 0.25 && pt.x < car.x + car.w + 0.25;
+      if (!inCarArea) continue;
+      if (e.doorsOpen && Math.abs(e.floor - p.floor) < 0.06) {
+        var navCar = World.navFind(p, { x: e.cx, y: g.hallY0 - 0.15 }) || [];
+        setWalk(navCar.concat([{ x: e.cx, y: g.hallY0 - 0.15 }, { x: e.cx, y: car.y + car.h * 0.55 }]));
+      } else if (Geom.inRect(g.hall, p.x, p.y, 0.35)) {
+        World.playerCallElevator(e.id);
+      } else {
+        setWalk([{ x: g.hallCX, y: g.hallY0 + 1.0 }]);
+      }
+      return;
+    }
 
     /* 楼梯间门 */
     var dA = g.stairDoorA.rect, dB = g.stairDoorB.rect;
@@ -94,7 +152,6 @@
       World.dist(pt.x, pt.y, dB.x + dB.w / 2, dB.y + dB.h / 2) < 0.85) {
       var L0 = World.dist(pt.x, pt.y, dA.x, dA.y) < World.dist(pt.x, pt.y, dB.x, dB.y) ? "A" : "B";
       var dr0 = L0 === "A" ? dA : dB;
-      /* 门前站位：走廊一侧，别站墙里 */
       var front = { x: L0 === "A" ? dr0.x + dr0.w + 0.6 : dr0.x - 0.6, y: dr0.y + dr0.h / 2 };
       if (World.dist(p.x, p.y, front.x, front.y) > 0.7) {
         setWalk([{ x: front.x, y: front.y }]);
@@ -105,37 +162,7 @@
       return;
     }
 
-    /* 电梯：呼梯面板 / 轿厢 */
-    for (var i = 0; i < world.elevators.length; i++) {
-      var e = world.elevators[i];
-      var info = e.id === "C" ? g.elev.C : g.elev.D;
-      var car = info.car, panel = info.panel;
-
-      /* 点轿厢（井道里，或门开着时车体露出来的那块） */
-      var inCarArea = pt.y < g.hallY0 - 0.05 && pt.x > car.x - 0.2 && pt.x < car.x + car.w + 0.2;
-      if (inCarArea) {
-        if (e.doorsOpen && Math.abs(e.floor - p.floor) < 0.06) {
-          var carRect = e.id === "C" ? g.elev.C.car : g.elev.D.car;
-          setWalk([{ x: e.cx, y: g.hallY0 - 0.15 }, { x: e.cx, y: carRect.y + carRect.h * 0.55 }]);
-          return;
-        }
-        if (Geom.inRect(g.hall, p.x, p.y, 0.2)) World.playerCallElevator(1);
-        else { setWalk([{ x: g.hallCX, y: g.hallY0 + 1.0 }]); pendingCall = 1; }
-        return;
-      }
-
-      /* 点 ▲▼ 面板 */
-      var pad = 0.14;
-      if (pt.x > panel.x - pad && pt.x < panel.x + panel.w + pad &&
-        pt.y > panel.y - pad && pt.y < panel.y + panel.h + pad) {
-        var dir = (pt.x < panel.x + panel.w / 2) ? 1 : -1;
-        if (Geom.inRect(g.hall, p.x, p.y, 0.2)) World.playerCallElevator(dir);
-        else { setWalk([{ x: g.hallCX, y: g.hallY0 + 1.0 }]); pendingCall = dir; }
-        return;
-      }
-    }
-
-    /* 楼梯通道：点上半段上楼，下半段下楼 */
+    /* 楼梯段：自动走过去、推门、再到楼梯口 */
     if (Geom.inRect(g.stairZoneA, pt.x, pt.y, 0) || Geom.inRect(g.stairZoneB, pt.x, pt.y, 0)) {
       if (World.nearStairs()) {
         World.playerTryStairs(pt.y < g.stairZoneA.y + g.stairZoneA.h / 2 ? 1 : -1);
@@ -144,26 +171,18 @@
         var dr = useA ? g.stairDoorA.rect : g.stairDoorB.rect;
         var cy = dr.y + dr.h / 2;
         var sign = useA ? 1 : -1;
-        var front = { x: dr.x + dr.w / 2 + sign * 0.75, y: cy };   // 门前（走廊侧）
-        var gap = { x: dr.x + dr.w / 2, y: cy };                    // 门洞里
-        var inside = { x: dr.x + dr.w / 2 - sign * 0.95, y: cy };   // 楼梯间里（门的另一侧）
-        setWalk([front, gap, inside, { x: pt.x, y: g.stairZoneA.y + 0.6 }]);
+        var front2 = { x: dr.x + dr.w / 2 + sign * 0.75, y: cy };
+        var gap = { x: dr.x + dr.w / 2, y: cy };
+        var inside = { x: dr.x + dr.w / 2 - sign * 0.95, y: cy };
+        var navTo = World.navFind(p, front2) || [{ x: front2.x, y: front2.y }];
+        setWalk(navTo.concat([gap, inside, { x: pt.x, y: g.stairZoneA.y + 0.6 }]));
         pendingDoor = useA ? "A" : "B";
       }
       return;
     }
 
-    /* 电梯门开着，点轿厢 = 进去 */
-    for (var i = 0; i < world.elevators.length; i++) {
-      var e = world.elevators[i];
-      var car = e.id === "C" ? g.elev.C.car : g.elev.D.car;
-      if (e.doorsOpen && Math.abs(e.floor - p.floor) < 0.06 && Geom.inRect(car, pt.x, pt.y, 0)) {
-        setWalk([{ x: e.cx, y: g.hallY0 - 0.3 }]);
-        return;
-      }
-    }
-
-    setWalk([{ x: pt.x, y: pt.y }]);
+    /* 平地：寻路走过去 */
+    setWalk(World.navFind(p, pt) || [{ x: pt.x, y: pt.y }]);
   }
 
   /* ---------- 主循环 ---------- */
@@ -184,24 +203,12 @@
     var acts = Input.consume();
     for (var i = 0; i < acts.length; i++) {
       if (typeof acts[i] === "string") doAction(acts[i]);
-      else if (acts[i] && acts[i].click) handleClick(acts[i].click);
+      else if (acts[i] && acts[i].click) onStageClick(acts[i].raw || { x: 0, y: 0 }, acts[i].click);
     }
     if (over) return;
 
     var mv = Input.poll();
     var p = world.player;
-
-    /* 楼梯间里 W/S = 上下楼 */
-    if (p && p.space === "floor" && World.nearStairs() && Math.abs(mv.y) > 0.4) {
-      if (lastMoveY * mv.y <= 0) {
-        World.playerTryStairs(mv.y < 0 ? 1 : -1);
-      }
-      lastMoveY = mv.y;
-      world.update(dt);
-      afterUpdate(dt);
-      return;
-    }
-    lastMoveY = Math.abs(mv.y) > 0.4 ? mv.y : 0;
 
     /* 点地走路 */
     var dx = mv.x, dy = mv.y, sprint = mv.sprint;
@@ -282,6 +289,7 @@
       resume: function () { paused = false; UI.showPause(false); },
       restart: function () { boot(); },
       pressCarFloor: function (f) { World.playerPressCarFloor(f); },
+    callCar: callCar,
       openDoor: function () { World.playerToggleCarDoor(true); },
       closeDoor: function () { World.playerToggleCarDoor(false); },
       exitCar: function () { World.playerExitCar(); }

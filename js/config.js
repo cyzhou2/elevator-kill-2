@@ -9,7 +9,7 @@
 
 var CFG = {
   /* ---------- 版本 ---------- */
-  VERSION: "v1.0",
+  VERSION: "v1.1",
   TITLE: "电梯公寓大逃杀 2",
 
   /* ---------- 楼体（★ 与美术/版面直接相关） ---------- */
@@ -49,19 +49,19 @@ var CFG = {
   },
   KILLER: {
     patrol: 1.55,        // 巡逻速度
-    chase: 2.85,         // 追击速度（快于小孩走路，慢于小孩冲刺 → 冲刺能拉开，但体力有限）
+    chase: 3.05,         // 追击速度（快于小孩走路，略慢于小孩冲刺）
     stairSpeed: 1.6,
     radius: 0.26,
-    sight: 9.5,          // 视野半径（需要视线不被挡）
-    sightCone: 1.2,      // 视野半角
-    hearWalk: 6.0,       // 听到走路的半径
-    hearSprint: 11.0,    // 听到冲刺的半径
-    hearDoor: 7.5,       // 听到开门
+    sight: 11.5,         // 视野半径（需要视线不被挡）
+    sightCone: 1.35,     // 视野半角
+    hearWalk: 8.0,       // 听到走路的半径
+    hearSprint: 14.0,    // 听到冲刺的半径
+    hearDoor: 9.0,       // 听到开门
     catchRange: 0.62,    // 抓到判定距离
-    catchTime: 0.45,     // 抓取读条（被抓住时疯狂按方向可以延长一点点）
+    catchTime: 0.38,     // 抓取读条
     loseSightSec: 3.5,   // 跟丢后继续追最后位置的时间
     /* AI 决策节奏 */
-    thinkSec: 0.35,
+    thinkSec: 0.22,
     sweepSpan: 3,        // 扫楼一次跨几层
     checkedCool: 25,     // 刚查过的层多久不重复
     preferStairs: 0.78   // 走楼梯的概率（其余坐电梯，制造「电梯门开了它站里面」的恐惧）

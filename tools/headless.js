@@ -6,7 +6,7 @@ const vm = require("vm");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
-const FILES = ["js/config.js", "js/geom.js", "js/world.js", "js/ai.js"];
+const FILES = ["js/config.js", "js/geom.js", "js/nav.js", "js/world.js", "js/ai.js"];
 
 function makeWorld(over, seed) {
   let s = seed || 12345;

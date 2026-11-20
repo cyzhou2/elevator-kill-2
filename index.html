@@ -27,15 +27,26 @@
   <div id="hint"></div>
   <div id="flashMsg"></div>
 
-  <!-- 轿厢面板 -->
-  <div id="carPanel" class="hidden">
-    <div id="carPanelTitle">C 梯</div>
-    <div id="carFloors"></div>
-    <div class="carDoors">
-      <button id="carDoorOpen">开门</button>
-      <button id="carDoorClose">关门</button>
-      <button id="carExit">出去</button>
+  <!-- 呼梯面板（靠近电梯才出现，鼠标按） -->
+  <div id="callPanel" class="hidden">
+    <div class="cpTitle">呼梯</div>
+    <div class="cpRow" data-car="C">
+      <span class="cpName">C 梯</span>
+      <span class="cpRead" id="cpReadC">--</span>
+      <button class="cpBtn" id="cpBtnC" aria-label="叫 C 梯">呼</button>
     </div>
+    <div class="cpRow" data-car="D">
+      <span class="cpName">D 梯</span>
+      <span class="cpRead" id="cpReadD">--</span>
+      <button class="cpBtn" id="cpBtnD" aria-label="叫 D 梯">呼</button>
+    </div>
+  </div>
+
+  <!-- 轿厢面板：11 行 × 2 列，最后一行是开/关门图标 -->
+  <div id="carPanel" class="hidden">
+    <div id="carPanelTitle">C 梯 · 1F</div>
+    <button id="carExit" class="carExit" aria-label="出梯" title="出梯">⇥</button>
+    <div id="carFloors"></div>
   </div>
 
   <!-- 触屏 -->
@@ -72,6 +83,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/geom.js"></script>
+<script src="js/nav.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/world.js"></script>
 <script src="js/ai.js"></script>

@@ -714,24 +714,6 @@ var Render = (function () {
     ctx.strokeRect(gap.x - open, gap.y, leafW, gap.h);
     ctx.strokeRect(gap.x + leafW + open, gap.y, leafW, gap.h);
 
-    /* 门旁的呼梯面板：▲ 上 / ▼ 下（有人按过会亮） */
-    var panel = e.id === "C" ? g.elev.C.panel : g.elev.D.panel;
-    ctx.fillStyle = "rgba(12,15,16,0.96)";
-    ctx.fillRect(panel.x, panel.y, panel.w, panel.h);
-    ctx.strokeStyle = "#39423f";
-    ctx.lineWidth = 0.02;
-    ctx.strokeRect(panel.x + 0.01, panel.y + 0.01, panel.w - 0.02, panel.h - 0.02);
-    var upLit = world.hallUp[world.viewFloor].size > 0;
-    var downLit = world.hallDown[world.viewFloor].size > 0;
-    ctx.font = "0.17px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = upLit ? "#e8c886" : "#59645f";
-    ctx.fillText("▲", panel.x + panel.w * 0.27, panel.y + panel.h * 0.52);
-    ctx.fillStyle = downLit ? "#e8c886" : "#59645f";
-    ctx.fillText("▼", panel.x + panel.w * 0.73, panel.y + panel.h * 0.52);
-    ctx.textAlign = "left";
-
     /* 门上方的小显示屏：楼层 + 方向 */
     var cy = gap.y + gap.h + 0.26;
     ctx.save();
@@ -740,7 +722,7 @@ var Render = (function () {
     ctx.strokeStyle = "rgba(120,40,36,0.5)";
     ctx.lineWidth = 0.015;
     ctx.strokeRect(gap.x + gap.w / 2 - 0.22, cy - 0.1, 0.44, 0.17);
-    var known = near || Math.random() > 0.0;
+    var known = near || (world.panelVisible && world.panelVisible());
     ctx.fillStyle = "#c25a4a";
     ctx.font = "0.13px ui-monospace, monospace";
     ctx.textAlign = "center";

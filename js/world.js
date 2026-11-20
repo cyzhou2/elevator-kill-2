@@ -21,8 +21,7 @@ var World = (function () {
     floor: 1,           // 玩家所在层
     viewFloor: 1,       // 正在渲染的楼层
     elevators: [],      // 2 部
-    hallUp: [],         // hallUp[floor] = Set
-    hallDown: [],
+    hallCall: [],        // hallCall[floor] = Set(被叫的梯号)
     stairDoors: [],     // stairDoors[floor] = { A:{...}, B:{...} }
     actors: [],
     player: null,
@@ -49,16 +48,16 @@ var World = (function () {
   function init(cfg) {
     Cfg = cfg;
     G = Geom.build(cfg);
+    if (typeof Nav !== "undefined" && Nav) Nav.build(G);
 
     W.time = 0; W.running = false; W.over = false; W.reason = null;
     W.actors = []; W.noises = []; W.events = []; W.blood = [];
     W.kills = 0; W.score = 0; W.shake = 0; W.flash = 0;
     W.tension = 0; W.heartbeat = 0; W.lastSeenKiller = null;
 
-    W.hallUp = []; W.hallDown = []; W.stairDoors = [];
+    W.hallCall = []; W.stairDoors = [];
     for (var f = 0; f <= cfg.FLOORS; f++) {
-      W.hallUp[f] = new Set();
-      W.hallDown[f] = new Set();
+      W.hallCall[f] = new Set();
       W.stairDoors[f] = {
         A: makeDoor("A", f), B: makeDoor("B", f)
       };
@@ -305,16 +304,13 @@ var World = (function () {
 
   /* ================= 电梯 ================= */
 
-  function hasCall(e, f, dir) {
-    if (e.calls.has(f)) return true;
-    if (dir > 0) return W.hallUp[f].has(e.id);
-    if (dir < 0) return W.hallDown[f].has(e.id);
-    return false;
+  function hasCall(e, f) {
+    return e.calls.has(f) || W.hallCall[f].has(e.id);
   }
 
   function anyCall(e) {
     if (e.calls.size) return true;
-    for (var f = 1; f <= Cfg.FLOORS; f++) if (W.hallUp[f].size || W.hallDown[f].size) return true;
+    for (var f = 1; f <= Cfg.FLOORS; f++) if (W.hallCall[f].has(e.id)) return true;
     return false;
   }
 
@@ -322,7 +318,7 @@ var World = (function () {
     var out = [];
     for (var f = 1; f <= Cfg.FLOORS; f++) {
       var ahead = dir > 0 ? f > e.floor + 0.06 : f < e.floor - 0.06;
-      if (ahead && hasCall(e, f, dir)) out.push(f);
+      if (ahead && hasCall(e, f)) out.push(f);
     }
     return out;
   }
@@ -330,23 +326,16 @@ var World = (function () {
   function nearestCall(e) {
     var best = null, bd = 1e9;
     for (var f = 1; f <= Cfg.FLOORS; f++) {
-      if (!hasCall(e, f, 1) && !hasCall(e, f, -1) && !e.calls.has(f)) continue;
+      if (!hasCall(e, f)) continue;
       var d = Math.abs(f - e.floor);
       if (d < bd) { bd = d; best = f; }
     }
     return best;
   }
 
-  function clearFloorCalls(e, f, dir) {
+  function clearFloorCalls(e, f) {
     e.calls.delete(f);
-    /* 呼梯是共用的：谁来服务就整层清掉，另一部梯也不再来 */
-    if (dir > 0) W.hallUp[f].clear();
-    else if (dir < 0) W.hallDown[f].clear();
-    /* 这个方向没有别的活儿了，就顺手把同层反方向的也带走（避免为它再开一次门） */
-    if (!stopsAhead(e, dir).length) {
-      if (dir > 0) W.hallDown[f].clear();
-      if (dir < 0) W.hallUp[f].clear();
-    }
+    W.hallCall[f].delete(e.id);
   }
 
   function openDoors(e, f) {
@@ -355,7 +344,7 @@ var World = (function () {
     e.timer = Cfg.ELEV.doorOpenSec;
     e.doorsOpen = false;
     e.openedFor = dir2(e);
-    clearFloorCalls(e, f, e.dir === 0 ? 1 : e.dir);
+    clearFloorCalls(e, f);
     emitNoise(f, e.cx, G.hallY0 + 0.5, 4.0, "elev");
   }
   function dir2(e) { return e.dir || 1; }
@@ -381,6 +370,13 @@ var World = (function () {
         break;
       case "moving": {
         if (e.dir === 0) { planElevator(e); break; }
+        /* 已经压在整层、这层又有人叫 → 立刻开门，不许多跑 */
+        var atInt0 = Math.round(e.floor);
+        if (Math.abs(e.floor - atInt0) < 0.02 && hasCall(e, atInt0)) {
+          e.floor = atInt0;
+          openDoors(e, atInt0);
+          break;
+        }
         var nextInt = e.dir > 0 ? Math.ceil(e.floor - 1e-6) : Math.floor(e.floor + 1e-6);
         if (Math.abs(nextInt - e.floor) < 1e-3) nextInt += e.dir;
         nextInt = clamp(nextInt, 1, Cfg.FLOORS);
@@ -388,7 +384,7 @@ var World = (function () {
         var d = nextInt - e.floor;
         if (Math.abs(d) <= step) {
           e.floor = nextInt;
-          if (hasCall(e, nextInt, e.dir) || e.calls.has(nextInt)) {
+          if (hasCall(e, nextInt)) {
             openDoors(e, nextInt);
           } else if ((e.dir > 0 && nextInt >= Cfg.FLOORS) || (e.dir < 0 && nextInt <= 1)) {
             e.dir = -e.dir;
@@ -413,9 +409,10 @@ var World = (function () {
         e.doorsOpen = false;
         e.timer -= dt;
         e.openAmt = Math.max(0, e.openAmt - dt / Cfg.ELEV.doorCloseSec);
-        /* 关门途中有人按开门 / 门区有人 → 重新打开 */
-        if (W.hallUp[Math.round(e.floor)] && (W.hallUp[Math.round(e.floor)].size || W.hallDown[Math.round(e.floor)].size) && Math.abs(e.floor - Math.round(e.floor)) < 0.06) {
-          // 楼层呼梯会自然触发重开
+        /* 关门途中这一层又被叫了 → 重新开门 */
+        var cf = Math.round(e.floor);
+        if (Math.abs(e.floor - cf) < 0.06 && hasCall(e, cf) && e.openAmt < 0.6) {
+          e.state = "opening"; e.timer = Cfg.ELEV.doorOpenSec;
         }
         if (e.timer <= 0) { e.openAmt = 0; planElevator(e); }
         break;
@@ -606,14 +603,18 @@ var World = (function () {
     else p.stamina = Math.min(Cfg.KID.stamina, p.stamina + Cfg.KID.staminaRegen * dt);
 
     if (len > 0.1) p.face = Math.atan2(dy, dx);
-    var moved = moveActor(p, dx * sp * dt, dy * sp * dt, dt);
-    /* 脚步声 */
+    moveActor(p, dx * sp * dt, dy * sp * dt, dt);
+    /* 脚步声（轿厢里几乎是静的） */
     p.stepAcc = (p.stepAcc || 0) + sp * dt;
     var stride = canSprint ? 1.5 : 1.05;
     if (p.stepAcc > stride) {
       p.stepAcc = 0;
-      emitNoise(p.floor, p.x, p.y, canSprint ? Cfg.KILLER.hearSprint : Cfg.KILLER.hearWalk, canSprint ? "sprint" : "walk");
-      if (window.Audio2) Audio2.footstep(canSprint, p.floor === W.viewFloor);
+      if (p.space === "car") {
+        if (window.Audio2) Audio2.footstep(false, true);
+      } else {
+        emitNoise(p.floor, p.x, p.y, canSprint ? Cfg.KILLER.hearSprint : Cfg.KILLER.hearWalk, canSprint ? "sprint" : "walk");
+        if (window.Audio2) Audio2.footstep(canSprint, p.floor === W.viewFloor);
+      }
     }
   }
 
@@ -650,16 +651,29 @@ var World = (function () {
     }
   }
 
-  function playerCallElevator(dx) {
+  /** 玩家按某部梯的呼梯键（一部梯一个键，不分上下） */
+  function playerCallElevator(carId) {
     var p = W.player;
     if (!p || !p.alive || p.space !== "floor") return false;
-    var inHall = Geom.inRect(G.hall, p.x, p.y, -0.05);
-    if (!inHall) return false;
-    var set = (dx > 0 ? W.hallUp : W.hallDown)[p.floor];
-    set.add("C"); set.add("D");
+    var id = carId === "D" ? "D" : "C";
+    if (!panelVisible()) return false;
+    var e = carById(id);
+    if (!e) return false;
+    if (W.hallCall[p.floor].has(id)) return false;
+    W.hallCall[p.floor].add(id);
     if (window.Audio2) Audio2.ding(0.4);
-    if (p.controlled) addEvent("你按了 " + p.floor + "F 的" + (dx > 0 ? "▲" : "▼"), "you", p.floor);
+    if (p.controlled) addEvent("你叫了 " + id + " 梯（" + p.floor + "F）", "you", p.floor);
     return true;
+  }
+
+  /** 呼梯面板只有在电梯附近才显示（也没法用键盘盲按） */
+  function panelVisible() {
+    var p = W.player;
+    if (!p || !p.alive || p.space === "stair") return false;
+    if (p.space === "car") return true;
+    var G2 = G;
+    if (Geom.inRect(G2.hall, p.x, p.y, 0.1)) return true;
+    return dist(p.x, p.y, G2.hallCX, G2.hallY0 + 1.2) < 5.2;
   }
 
   function playerPressCarFloor(floorNum) {
@@ -733,8 +747,8 @@ var World = (function () {
     get kills() { return W.kills; },
     get score() { return W.score; },
     get stairDoors() { return W.stairDoors; },
-    get hallUp() { return W.hallUp; },
-    get hallDown() { return W.hallDown; },
+    get hallCall() { return W.hallCall; },
+    panelVisible: panelVisible,
     get events() { return W.events; },
     get noises() { return W.noises; },
     update: update,
@@ -755,6 +769,8 @@ var World = (function () {
     playerExitCar: playerExitCar, nearDoor: nearDoor, nearStairs: nearStairs,
     dist: dist, rnd: rnd, clamp: clamp,
     __move: moveActor, __unstick: function(a){ unstick(a); },
+    navFind: function (a, to) { return (typeof Nav !== "undefined" && Nav) ? Nav.find({ x: a.x, y: a.y }, to) : null; },
+    navGo: function (a, tx, ty, dt, speed) { return (typeof Nav !== "undefined" && Nav) ? Nav.goTo(API, a, tx, ty, dt, speed) : false; },
     __elevators: function () { return W.elevators; }
   };
   return API;

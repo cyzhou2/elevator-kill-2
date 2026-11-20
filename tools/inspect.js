@@ -1,5 +1,5 @@
 const fs = require("fs"), vm = require("vm");
-const FILES = ["js/config.js", "js/geom.js", "js/world.js", "js/ai.js"];
+const FILES = ["js/config.js", "js/geom.js", "js/nav.js", "js/world.js", "js/ai.js"];
 const sb = { console, Math, Date, JSON, Set, Map, isFinite, parseFloat, parseInt, window: {}, setTimeout };
 sb.globalThis = sb; vm.createContext(sb);
 for (const f of FILES) vm.runInContext(fs.readFileSync(f, "utf8"), sb, { filename: f });

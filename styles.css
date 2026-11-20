@@ -189,3 +189,53 @@ body.in-car #btns { display: none; }
   #carFloors { gap: 4px; }
   #carFloors .cf { height: 26px; font-size: 10px; }
 }
+
+
+/* ---------- 呼梯面板（靠近电梯出现） ---------- */
+#callPanel {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 132px;
+  width: 214px; padding: 8px 10px 9px;
+  background: rgba(10, 13, 13, .92);
+  border: 1px solid #2f3836; border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.7), inset 0 1px 0 #232b29;
+  z-index: 8;
+  animation: cpIn .16s ease-out;
+}
+@keyframes cpIn { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.cpTitle { font-size: 10px; letter-spacing: 3px; color: #4e5956; text-align: center; margin-bottom: 6px; }
+.cpRow { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.cpRow + .cpRow { border-top: 1px solid #1b2221; }
+.cpName { width: 34px; font-size: 11px; color: #7d8a86; }
+.cpRead { flex: 1; font-size: 13px; color: #cfd9d4; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.cpRead .up { color: #9fd0b0; }
+.cpRead .dn { color: #d0a89f; }
+.cpBtn {
+  flex: none; width: 40px; height: 28px; border-radius: 50%;
+  font: inherit; font-size: 12px; color: #9aa7a2;
+  background: #131918; border: 1px solid #333d3a;
+}
+.cpBtn:hover { color: #e2eae6; border-color: #4d5955; }
+.cpBtn.lit {
+  color: #ffd9a0; border-color: #7a5f31; background: #241d10;
+  box-shadow: 0 0 10px rgba(201,168,106,.5), inset 0 0 6px rgba(201,168,106,.3);
+}
+
+/* ---------- 轿厢面板：11×2 ---------- */
+#carPanel { padding-top: 10px; }
+#carFloors { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+#carFloors .cf {
+  height: 26px; border-radius: 50%; font-size: 11px;
+}
+#carFloors .cDoor {
+  height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center;
+  color: #9aa7a2; background: #121716; border: 1px solid #2b3331; font-size: 12px;
+}
+#carFloors .cDoor:hover { color: #e2eae6; border-color: #45504d; }
+#carPanelTitle { padding-right: 26px; }
+.carExit {
+  position: absolute; right: 10px; top: 8px;
+  width: 22px; height: 20px; padding: 0; border-radius: 4px;
+  font-size: 12px; line-height: 1; color: #8b9793;
+  background: #131918; border: 1px solid #2b3331;
+}
+.carExit:hover { color: #e2eae6; border-color: #45504d; }

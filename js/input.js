@@ -47,7 +47,7 @@ var Input = (function () {
       var r = els.stage.getBoundingClientRect();
       var p = Render.toWorld(e.clientX - r.left, e.clientY - r.top);
       clickTarget = p;
-      push({ click: p });
+      push({ click: p, raw: { x: e.clientX - r.left, y: e.clientY - r.top } });
     });
 
     /* 触屏摇杆 */

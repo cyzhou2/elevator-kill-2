@@ -6,14 +6,15 @@
 var UI = (function () {
   var el = {};
   var game = null;
-  var lastHint = "", lastPanel = false, lastFloorTxt = "";
+  var lastHint = "", lastPanel = false, lastFloorTxt = "", lastCallPanel = false;
 
   function $(id) { return document.getElementById(id); }
 
   function init(g) {
     game = g;
     ["clock", "floorNo", "aliveNo", "hint", "carPanel", "carPanelTitle", "carFloors",
-      "carDoorOpen", "carDoorClose", "carExit", "overlay", "overlayCard",
+      "carExit", "callPanel", "cpReadC", "cpReadD", "cpBtnC", "cpBtnD",
+      "overlay", "overlayCard",
       "pause", "pauseResume", "pauseRestart", "joy", "knob", "staminaBar", "flashMsg"].forEach(function (k) {
       el[k] = $(k);
     });
@@ -22,23 +23,49 @@ var UI = (function () {
 
     if (el.pauseResume) el.pauseResume.onclick = function () { game.resume(); };
     if (el.pauseRestart) el.pauseRestart.onclick = function () { game.restart(); };
-    if (el.carDoorOpen) el.carDoorOpen.onclick = function () { game.openDoor && game.openDoor(); };
-    if (el.carDoorClose) el.carDoorClose.onclick = function () { game.closeDoor && game.closeDoor(); };
     if (el.carExit) el.carExit.onclick = function () { game.exitCar && game.exitCar(); };
+    if (el.cpBtnC) el.cpBtnC.onclick = function () { game.callCar && game.callCar("C"); };
+    if (el.cpBtnD) el.cpBtnD.onclick = function () { game.callCar && game.callCar("D"); };
   }
 
   function buildCarPanel() {
     if (!el.carFloors) return;
     var html = "";
-    for (var f = CFG.FLOORS; f >= 1; f--) {
+    /* 20..1 两两一行，共 10 行 */
+    for (var f = CFG.FLOORS; f >= 1; f -= 2) {
       html += '<button class="cf" data-floor="' + f + '">' + f + "</button>";
+      var g = f - 1;
+      if (g >= 1) html += '<button class="cf" data-floor="' + g + '">' + g + "</button>";
+      else html += '<span></span>';
     }
+    /* 第 11 行：开门 / 关门（图标） */
+    html += '<button class="cDoor" data-door="open" title="开门"><span class="dooricon">&#9664;<i></i>&#9654;</span></button>';
+    html += '<button class="cDoor" data-door="close" title="关门"><span class="dooricon">&#9654;<i></i>&#9664;</span></button>';
     el.carFloors.innerHTML = html;
     el.carFloors.querySelectorAll(".cf").forEach(function (b) {
       b.addEventListener("click", function () {
         game.pressCarFloor(parseInt(b.dataset.floor, 10));
       });
     });
+    el.carFloors.querySelectorAll(".cDoor").forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (b.dataset.door === "open") game.openDoor && game.openDoor();
+        else game.closeDoor && game.closeDoor();
+      });
+    });
+  }
+
+  /* 电梯读数：楼层 + 方向（面板只在附近出现，所以看得到就是真的） */
+  function carRead(w, id) {
+    var e = w.carById(id);
+    if (!e) return { text: "--", cls: "" };
+    var f = Math.round(e.floor);
+    var atInt = Math.abs(e.floor - f) < 0.06;
+    var here = atInt && Math.abs(f - w.player.floor) < 0.06;
+    if (here && e.doorsOpen) return { text: f + "F · 开门", cls: "" };
+    if (here && atInt) return { text: f + "F · 本层", cls: "" };
+    var dir = e.state === "moving" ? (e.dir > 0 ? "▲" : e.dir < 0 ? "▼" : "") : "";
+    return { text: f + "F " + dir, cls: e.dir > 0 ? "up" : e.dir < 0 ? "dn" : "" };
   }
 
   function fmtTime(s) {
@@ -87,6 +114,20 @@ var UI = (function () {
       }
     }
 
+    /* 呼梯面板 */
+    var showPanel = !!(W.panelVisible && W.panelVisible());
+    if (showPanel !== lastCallPanel) {
+      lastCallPanel = showPanel;
+      el.callPanel.classList.toggle("hidden", !showPanel);
+    }
+    if (showPanel) {
+      var rc = carRead(W, "C"), rd = carRead(W, "D");
+      el.cpReadC.innerHTML = '<span class="' + rc.cls + '">' + rc.text + "</span>";
+      el.cpReadD.innerHTML = '<span class="' + rd.cls + '">' + rd.text + "</span>";
+      el.cpBtnC.classList.toggle("lit", W.hallCall[W.player.floor].has("C"));
+      el.cpBtnD.classList.toggle("lit", W.hallCall[W.player.floor].has("D"));
+    }
+
     /* 提示 */
     var hint = hintFor(W);
     if (hint !== lastHint) {
@@ -102,7 +143,7 @@ var UI = (function () {
     if (p.space === "stair") return "楼梯上…";
     if (p.space === "car") return "点右侧楼层键选层 · <b>Space</b> 出门";
     var g = W.geom;
-    if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>W</b> 上楼 · <b>S</b> 下楼";
+    if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼（W/S 仍是平移）";
     if (W.nearDoor && W.nearDoor()) {
       var L = W.nearDoor();
       var d = W.state.stairDoors[p.floor][L];
@@ -111,7 +152,7 @@ var UI = (function () {
     if (Geom.inRect(g.hall, p.x, p.y, -0.05)) {
       var open = W.elevAt(p.floor).filter(function (e) { return e.doorsOpen; });
       if (open.length) return "门开着 · 走进轿厢";
-      return "<b>E</b> 呼梯 · 或点墙上的按钮";
+      return "点呼梯面板叫梯 · 或 <b>E</b> 叫最近的";
     }
     return "";
   }

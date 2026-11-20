@@ -1,114 +1,35 @@
 /* ============================================================
- * ai.js · 小孩 AI 与杀人犯 AI
+ * ai.js · 小孩 AI / 杀人犯 AI
  * ------------------------------------------------------------
- * 小孩：瞎晃 → 看见它就往楼梯间跑 → 换层 → 继续晃
- * 杀人犯：扫楼 → 看到/听到 → 追 → 跟丢就搜 → 频道里互相通气
+ * - 一律用 Nav 网格寻路，不再"直勾勾"地往墙上撞；路上自动开门
+ * - 目标锁定：决定之后 2~6 秒不改主意，到站先歇一会儿 → 不抽搐
+ * - 逃跑只认一个楼梯间，直到换层成功
  * ============================================================ */
 "use strict";
 
 var AI = (function () {
   function rnd(a, b) { return a + (b - a) * Math.random(); }
-
-  /* 把目标点挪到能站的地方（声音/情报可能落在墙里） */
-  function safePoint(w, x, y, floor) {
-    var r = 0.3;
-    if (w.canStand(floor, x, y, r)) return { x: x, y: y };
-    for (var step = 1; step <= 14; step++) {
-      var d = step * 0.12;
-      for (var k = 0; k < 12; k++) {
-        var ang = (k / 12) * Math.PI * 2;
-        var nx = x + Math.cos(ang) * d, ny = y + Math.sin(ang) * d;
-        if (w.canStand(floor, nx, ny, r)) return { x: nx, y: ny };
-      }
-    }
-    return { x: x, y: y };
-  }
   function dist(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy); }
 
-  /* 朝目标点走一步；被挡住就顺手开门。返回是否已经到达 */
-  function steer(w, a, tx, ty, speed, dt) {
-    var G = w.geom;
-    var dx = tx - a.x, dy = ty - a.y;
-    var d = Math.hypot(dx, dy);
-    if (d < 0.1) return true;
-    var ux = dx / d, uy = dy / d;
-    a.face = Math.atan2(uy, ux);
-    var px = a.x, py = a.y;
-    w.__move(a, ux * speed * dt, uy * speed * dt, dt);
-    if (a.space !== "floor") return false;
-    var moved = Math.hypot(a.x - px, a.y - py);
-    if (moved < speed * dt * 0.3) {
-      var dA = G.stairDoorA.rect, dB = G.stairDoorB.rect;
-      var L = null;
-      if (dist(a.x, a.y, dA.x + dA.w / 2, dA.y + dA.h / 2) < 1.6) L = "A";
-      else if (dist(a.x, a.y, dB.x + dB.w / 2, dB.y + dB.h / 2) < 1.6) L = "B";
-      if (L) {
-        var dd = w.state.stairDoors[a.floor][L];
-        if (!dd.open) {
-          dd.open = true; dd.closeTimer = 0;
-          w.emitNoise(a.floor, a.x, a.y, w.cfg.DOOR.noise, "door");
-        }
-      }
-    }
-    return d < 0.16;
-  }
-
-  /* 门前的「站位点」：门洞外侧，人站得住 */
   function doorFront(G, L) {
     var dr = L === "A" ? G.stairDoorA.rect : G.stairDoorB.rect;
-    var inward = L === "A" ? 0.62 : -0.62;      // 走廊一侧
-    return { x: dr.x + dr.w / 2 + inward, y: dr.y + dr.h / 2 };
+    return { x: dr.x + dr.w / 2 + (L === "A" ? 0.8 : -0.8), y: dr.y + dr.h / 2 };
   }
 
-  /* 走向楼梯口：门前 → 穿门 → 楼梯口。返回 true 表示已站到楼梯口 */
-  function goToStairs(w, a, L, dt, speed) {
+  /* 走到楼梯口（Nav 自己穿门、自己推门） */
+  function goStairZone(w, a, L, dt, speed) {
     var G = w.geom;
-    var dr = L === "A" ? G.stairDoorA.rect : G.stairDoorB.rect;
     var zone = L === "A" ? G.stairZoneA : G.stairZoneB;
-    var dd = w.state.stairDoors[a.floor][L];
-    var gapX = dr.x + dr.w / 2, gapY = dr.y + dr.h / 2;
-    var front = doorFront(G, L);
-    /* 已经越过墙线（在楼梯间一侧） */
-    var crossed = L === "A" ? a.x < dr.x + dr.w : a.x > dr.x;
-
-    if (dd.amt < 0.6) {
-      if (!crossed && Math.hypot(a.x - front.x, a.y - front.y) < 0.85) {
-        if (!dd.open) {
-          dd.open = true; dd.closeTimer = 0;
-          w.emitNoise(a.floor, gapX, gapY, w.cfg.DOOR.noise, "door");
-        }
-      }
-      steer(w, a, crossed ? gapX : front.x, gapY, speed, dt);
-      return false;
-    }
-    if (!crossed) {
-      var aligned = Math.abs(a.y - gapY) < 0.42;
-      steer(w, a, aligned || Math.hypot(a.x - front.x, a.y - front.y) < 0.55 ? gapX : front.x, gapY, speed, dt);
-      return false;
-    }
-    var cx = zone.x + zone.w / 2, cy = zone.y + 0.5;
-    if (Math.hypot(a.x - cx, a.y - cy) < 0.6) return true;
-    steer(w, a, cx, cy, speed, dt);
-    return false;
-  }
-
-  /* 走楼梯换层 */
-  function stairsTo(w, a, targetFloor, dt) {
-    var G = w.geom;
-    var dir = targetFloor > a.floor ? 1 : -1;
-    var fA = doorFront(G, "A"), fB = doorFront(G, "B");
-    var useA = Math.hypot(a.x - fA.x, a.y - fA.y) <= Math.hypot(a.x - fB.x, a.y - fB.y);
-    var L = useA ? "A" : "B";
-    if (goToStairs(w, a, L, dt, 1.6)) {
-      if (!w.startStairs(a, L, dir)) w.startStairs(a, L, -dir);
-    }
+    var tx = zone.x + zone.w / 2, ty = zone.y + 0.6;
+    if (dist(a.x, a.y, tx, ty) < 0.75) return true;
+    if (w.navGo) w.navGo(a, tx, ty, dt, speed);
+    return dist(a.x, a.y, tx, ty) < 0.75;
   }
 
   /* ================= 小孩 ================= */
 
   function kidUpdate(w, a, dt) {
-    var C = w.cfg;
-    a.aiTimer -= dt;
+    var C = w.cfg, G = w.geom, now = w.state.time;
 
     if (a.space === "car") {
       var e = w.carById(a.carId);
@@ -117,68 +38,109 @@ var AI = (function () {
       if (!e.calls.has(goal) && Math.abs(e.floor - goal) > 0.1) e.calls.add(goal);
       if (e.doorsOpen && Math.abs(e.floor - goal) < 0.1) {
         a.space = "floor"; a.floor = Math.round(e.floor);
-        a.x = e.cx; a.y = w.geom.hallY0 + 0.4; a.carId = null; a.carGoal = null;
+        a.x = e.cx; a.y = G.hallY0 + 0.4; a.carId = null; a.carGoal = null;
       }
       return;
     }
     if (a.space !== "floor") return;
 
-    /* 看见杀人犯 → 跑 */
+    /* 看得见它？ */
     var threat = null, td = 99;
     for (var i = 0; i < w.state.actors.length; i++) {
       var k = w.state.actors[i];
-      if (k.kind !== "killer" || !k.alive || k.floor !== a.floor || k.space === "car") continue;
-      if (!w.los(a.floor, a.x, a.y, k.x, k.y)) continue;
+      if (k.kind !== "killer" || !k.alive || k.floor !== a.floor || k.space !== "floor") continue;
       var d = dist(a.x, a.y, k.x, k.y);
-      if (d < 6.5 && d < td) { td = d; threat = k; }
+      if (d > 6.5 || d >= td) continue;
+      if (!w.los(a.floor, a.x, a.y, k.x, k.y)) continue;
+      threat = k; td = d;
     }
 
     if (threat) {
       a.aiState = "flee";
-      a.fear = 1;
-      var L = threat.x > a.x ? "A" : "B";
-      if (goToStairs(w, a, L, dt, C.KID.sprint * 0.78)) {
-        var dir = Math.random() < 0.5 ? 1 : -1;
-        if (!w.startStairs(a, L, dir)) w.startStairs(a, L, -dir);
+      if (!a.fleeL || now > (a.fleeUntil || 0)) {
+        a.fleeL = threat.x > a.x ? "A" : "B";
+        a.fleeUntil = now + 2.5;
+      }
+      if (goStairZone(w, a, a.fleeL, dt, C.KID.sprint * 0.70)) {
+        var dir = threat.floor > a.floor ? -1 : 1;
+        if (!w.startStairs(a, a.fleeL, dir)) w.startStairs(a, a.fleeL, -dir);
+        a.fleeL = null;
       }
       return;
     }
-    a.fear = Math.max(0, (a.fear || 0) - dt * 0.4);
+    a.fleeL = null;
 
-    if (a.aiTimer <= 0 && a.goalFloor == null) {
-      a.aiTimer = rnd(7, 15);
+    /* 换层计划 */
+    if (a.goalFloor != null) {
+      if (a.floor === a.goalFloor) {
+        a.goalFloor = null;
+        a.restUntil = now + rnd(1.2, 2.6);
+        a.path = null;
+        return;
+      }
+      if (!a.travelL || now > (a.travelUntil || 0)) {
+        a.travelL = Math.random() < 0.5 ? "A" : "B";
+        a.travelUntil = now + 6;
+      }
+      if (goStairZone(w, a, a.travelL, dt, C.KID.speed * 0.95)) {
+        var df = a.goalFloor > a.floor ? 1 : -1;
+        if (!w.startStairs(a, a.travelL, df)) w.startStairs(a, a.travelL, -df);
+        a.travelL = null;
+      }
+      a.aiState = "travel";
+      return;
+    }
+    a.travelL = null;
+
+    if (now < (a.restUntil || 0)) { a.path = null; a.aiState = "rest"; return; }
+
+    a.aiTimer -= dt;
+    if (a.aiTimer <= 0) {
+      a.aiTimer = rnd(7, 14);
       if (Math.random() < 0.45) {
         var nf = 1 + Math.floor(Math.random() * C.FLOORS);
-        if (Math.abs(nf - a.floor) >= 2) { a.goalFloor = nf; }
+        if (Math.abs(nf - a.floor) >= 2) { a.goalFloor = nf; return; }
       }
     }
-    if (a.goalFloor != null) {
-      if (a.floor === a.goalFloor) { a.goalFloor = null; a.aiTimer = rnd(1.5, 3.5); }
-      else { stairsTo(w, a, a.goalFloor, dt); return; }
-    }
 
-    if (a.wanderX == null || Math.abs(a.x - a.wanderX) < 0.5) {
-      a.wanderX = rnd(4, w.geom.L - 4);
-      a.wanderY = rnd(0.7, w.geom.corridor.h - 0.7);
+    /* 本层晃：一个目标走到底，到了先歇 1~3 秒 */
+    if (!a.wander) {
+      a.wander = {
+        x: rnd(G.corridor.x + 0.8, G.corridor.x + G.corridor.w - 0.8),
+        y: rnd(0.7, G.corridor.h - 0.7)
+      };
+      a.path = null;
     }
-    steer(w, a, a.wanderX, a.wanderY, C.KID.speed * 0.8, dt);
+    if (dist(a.x, a.y, a.wander.x, a.wander.y) < 0.55) {
+      a.wander = null;
+      a.restUntil = now + rnd(1.0, 3.0);
+      a.path = null;
+      return;
+    }
+    if (w.navGo) w.navGo(a, a.wander.x, a.wander.y, dt, C.KID.speed * 0.8);
     a.aiState = "wander";
   }
 
   /* ================= 杀人犯 ================= */
 
   function killerUpdate(w, a, dt) {
-    var C = w.cfg;
+    var C = w.cfg, G = w.geom, now = w.state.time;
+    if (a.space === "floor" && !a.travel && w.nearStairs && w.nearStairs()) {
+      /* 站在楼梯口却没打算换层：说明目标就在本层，走出去 */
+      a.path = null;
+    }
 
     if (a.space === "car") {
       var e = w.carById(a.carId);
       if (!e) { a.space = "floor"; return; }
-      var goal = a.carGoal;
-      if (goal == null) { a.space = "floor"; a.floor = Math.round(e.floor); a.x = e.cx; a.y = w.geom.hallY0 + 0.4; a.carId = null; return; }
-      if (!e.calls.has(goal) && Math.abs(e.floor - goal) > 0.1) e.calls.add(goal);
-      if (e.doorsOpen && Math.abs(e.floor - goal) < 0.1) {
+      if (a.carGoal == null) {
         a.space = "floor"; a.floor = Math.round(e.floor);
-        a.x = e.cx; a.y = w.geom.hallY0 + 0.4; a.carId = null; a.carGoal = null;
+        a.x = e.cx; a.y = G.hallY0 + 0.4; a.carId = null; return;
+      }
+      if (!e.calls.has(a.carGoal) && Math.abs(e.floor - a.carGoal) > 0.1) e.calls.add(a.carGoal);
+      if (e.doorsOpen && Math.abs(e.floor - a.carGoal) < 0.1) {
+        a.space = "floor"; a.floor = Math.round(e.floor);
+        a.x = e.cx; a.y = G.hallY0 + 0.4; a.carId = null; a.carGoal = null;
       }
       return;
     }
@@ -194,43 +156,45 @@ var AI = (function () {
     var best = null, bd = 1e9;
     for (var i = 0; i < w.state.actors.length; i++) {
       var kid = w.state.actors[i];
-      if (kid.kind !== "kid" || !kid.alive || kid.space === "stair") continue;
+      if (kid.kind !== "kid" || !kid.alive || kid.space !== "floor") continue;
       if (kid.floor !== a.floor) continue;
-      if (kid.space === "car" && Math.abs((w.carById(a.carId) || {}).floor || -99) > 99) continue;
       var d = dist(a.x, a.y, kid.x, kid.y);
-      if (d > C.KILLER.sight) continue;
+      if (d > C.KILLER.sight || d >= bd) continue;
       if (!w.los(a.floor, a.x, a.y, kid.x, kid.y)) continue;
       var ang = Math.atan2(kid.y - a.y, kid.x - a.x);
       if (Math.abs(Geom.angDiff(ang, a.face)) > (kid.lightOn ? C.KILLER.sightCone * 1.5 : C.KILLER.sightCone)) continue;
-      if (d < bd) { bd = d; best = kid; }
+      best = kid; bd = d;
     }
     if (best) {
       a.state = "chase";
+      a.chaseKid = best.id;
       a.target = { x: best.x, y: best.y, floor: best.floor };
-      a.channel = { x: best.x, y: best.y, floor: best.floor, t: w.state.time };
+      a.path = null;
+      a.channel = { x: best.x, y: best.y, floor: best.floor, t: now };
       stepKiller(w, a, dt);
       return;
     }
 
     /* 2. 听到的动静 */
-    if (a.heard && w.state.time - a.heard.t < 4 && !a.target) {
+    if (a.heard && now - a.heard.t < 4) {
       a.state = "search";
-      var hp = safePoint(w, a.heard.x, a.heard.y, a.floor);
-      a.target = { x: hp.x, y: hp.y, floor: a.floor };
+      a.target = { x: a.heard.x, y: a.heard.y, floor: a.floor };
+      a.path = null;
       stepKiller(w, a, dt);
       return;
     }
 
     /* 3. 频道情报 */
     var intel = channelIntel(w, a);
-    if (intel && w.state.time - intel.t < 8) {
+    if (intel && now - intel.t < 8) {
       if (intel.floor === a.floor) {
         a.state = "search";
-        var ip = safePoint(w, intel.x, intel.y, a.floor);
-        a.target = { x: ip.x, y: ip.y, floor: a.floor };
+        a.target = { x: intel.x, y: intel.y, floor: a.floor };
+        a.path = null;
         stepKiller(w, a, dt);
         return;
       }
+      a.state = "patrol";
       setTravel(w, a, intel.floor);
       travelStep(w, a, dt);
       return;
@@ -239,18 +203,25 @@ var AI = (function () {
     /* 4. 扫楼 */
     a.state = "patrol";
     if (a.patrolFloor == null) a.patrolFloor = a.floor;
-    if (a.floor !== a.patrolFloor) { setTravel(w, a, a.patrolFloor); travelStep(w, a, dt); return; }
-    a.checked[a.floor] = w.state.time;
+    if (a.floor !== a.patrolFloor) {
+      setTravel(w, a, a.patrolFloor);
+      travelStep(w, a, dt);
+      return;
+    }
+    a.checked[a.floor] = now;
 
-    if (a.target && a.target.floor !== a.floor) a.target = null;
+    if (a.target && a.target.floor === a.floor && dist(a.x, a.y, a.target.x, a.target.y) < 0.6) {
+      a.target = null;
+      a.checkedThisFloor = true;
+    }
     if (!a.target) {
       if (a.checkedThisFloor) {
         a.checkedThisFloor = false;
         a.patrolFloor = nextSweepFloor(w, a);
         if (a.patrolFloor !== a.floor) { setTravel(w, a, a.patrolFloor); travelStep(w, a, dt); return; }
-      } else {
-        a.target = patrolPoint(w, a, a.floor);
       }
+      a.target = patrolPoint(w, a);
+      a.path = null;
     }
     stepKiller(w, a, dt);
   }
@@ -280,67 +251,98 @@ var AI = (function () {
     return 1 + Math.floor(Math.random() * C.FLOORS);
   }
 
-  function patrolPoint(w, a, floor) {
-    var G = w.geom;
-    var r = Math.random();
-    if (r < 0.36) return { x: G.hallCX + (Math.random() < 0.5 ? -1 : 1) * 1.2, y: G.hallY0 + 1.3, floor: floor };
-    if (r < 0.7) return { x: G.corridor.x + 0.9 + Math.random() * (G.corridor.w - 1.8), y: G.corridor.h / 2, floor: floor };
-    return { x: G.stairDoorA.rect.x + 0.9, y: G.corridor.h / 2, floor: floor };
+  function patrolPoint(w, a) {
+    var G = w.geom, r = Math.random();
+    if (r < 0.4) return { x: G.hallCX + (Math.random() < 0.5 ? -1 : 1) * 1.2, y: G.hallY0 + 1.3, floor: a.floor };
+    if (r < 0.78) return { x: rnd(G.corridor.x + 0.9, G.corridor.x + G.corridor.w - 0.9), y: G.corridor.h / 2, floor: a.floor };
+    return { x: doorFront(G, Math.random() < 0.5 ? "A" : "B").x, y: G.corridor.h / 2, floor: a.floor };
   }
+
+  /* ---------- 换层 ---------- */
 
   function setTravel(w, a, floor) {
-    if (a.travel && a.travel.floor === floor) return a.travel;
+    if (a.travel && a.travel.floor === floor) return;
     var C = w.cfg;
     var df = Math.abs(floor - a.floor);
-    var useCar = df >= 4 ? Math.random() > C.KILLER.preferStairs : Math.random() > 0.6;
-    a.travel = { floor: floor, mode: useCar ? "car" : "stairs", pressed: false };
-    return a.travel;
+    var useCar = df >= 4 ? Math.random() > C.KILLER.preferStairs : Math.random() > 0.62;
+    a.travel = { floor: floor, mode: useCar ? "car" : "stairs", pressed: false, L: null };
+    a.path = null;
   }
 
-  /* 每帧推进「去某层」这件事 */
   function travelStep(w, a, dt) {
-    var t = a.travel;
+    var t = a.travel, G = w.geom;
     if (!t) return;
-    if (a.space === "floor" && a.floor === t.floor) { a.travel = null; return; }
-    if (t.mode === "stairs") { stairsTo(w, a, t.floor, dt); return; }
+    if (a.space === "floor" && a.floor === t.floor) { a.travel = null; a.path = null; t = null; return; }
+    if (a.space !== "floor") return;
 
-    var G = w.geom;
+    if (t.mode === "stairs") {
+      if (!t.L) t.L = Math.random() < 0.5 ? "A" : "B";
+      if (goStairZone(w, a, t.L, dt, 1.7)) {
+        var dir = t.floor > a.floor ? 1 : -1;
+        /* 上不去就试反方向；都上不去就换个楼梯间 */
+        if (!w.startStairs(a, t.L, dir) && !w.startStairs(a, t.L, -dir)) t.L = null;
+        /* travel 不清：等真的换层后由顶部判断清掉 */
+      }
+      return;
+    }
+
     var inHall = Geom.inRect(G.hall, a.x, a.y, -0.05);
     var opens = w.elevAt(a.floor), openCar = null;
     for (var i = 0; i < opens.length; i++) if (opens[i].doorsOpen) openCar = opens[i];
-
     if (openCar) {
-      if (!inHall) { steer(w, a, G.hallCX, G.hallY0 + 1.1, 1.75, dt); return; }
-      steer(w, a, openCar.cx, G.hallY0 - 0.25, 1.75, dt);
+      if (!inHall) { if (w.navGo) w.navGo(a, G.hallCX, G.hallY0 + 1.1, dt, 1.75); return; }
+      var dx = openCar.cx - a.x, dy = (G.hallY0 - 0.25) - a.y, d = Math.hypot(dx, dy) || 1;
+      w.__move(a, (dx / d) * 1.75 * dt, (dy / d) * 1.75 * dt, dt);
       if (a.space === "car") { a.carGoal = t.floor; a.travel = null; }
       return;
     }
-    if (!inHall) { steer(w, a, G.hallCX, G.hallY0 + 1.1, 1.75, dt); return; }
-    if (!t.pressed) {
-      var set = (t.floor > a.floor ? w.state.hallUp : w.state.hallDown)[a.floor];
-      set.add("C"); set.add("D");
+    /* 等太久就改走楼梯，别在厅里站到天亮 */
+    t.waitT = (t.waitT || 0) + dt;
+    if (t.waitT > 9) { t.mode = "stairs"; t.waitT = 0; t.pressed = false; return; }
+    if (!inHall) { if (w.navGo) w.navGo(a, G.hallCX, G.hallY0 + 1.1, dt, 1.75); return; }
+    t.pressT = (t.pressT || 0) - dt;
+    if (!t.pressed || t.pressT <= 0) {
+      w.state.hallCall[a.floor].add("C");
+      w.state.hallCall[a.floor].add("D");
       t.pressed = true;
+      t.pressT = 2.5;
     }
-    steer(w, a, G.hallCX, G.hallY0 + 0.95, 1.3, dt);
+    if (w.navGo) w.navGo(a, G.hallCX, G.hallY0 + 0.95, dt, 1.4);
   }
 
   function stepKiller(w, a, dt) {
     var C = w.cfg;
     if (a.space !== "floor") return;
-    var speed = a.state === "chase" ? C.KILLER.chase : C.KILLER.patrol;
-    if (a.target && a.target.floor === a.floor) {
-      steer(w, a, a.target.x, a.target.y, speed, dt);
-      if (dist(a.x, a.y, a.target.x, a.target.y) < 0.45) {
-        a.target = null;
-        if (a.state === "patrol") a.checkedThisFloor = true;
+    /* 追人的时候盯住本人，不追他刚才的位置 */
+    if (a.state === "chase" && a.chaseKid) {
+      for (var ci = 0; ci < w.state.actors.length; ci++) {
+        var ck = w.state.actors[ci];
+        if (ck.id !== a.chaseKid) continue;
+        if (!ck.alive || ck.space !== "floor" || ck.floor !== a.floor) { a.chaseKid = null; break; }
+        a.target = { x: ck.x, y: ck.y, floor: ck.floor };
+        break;
       }
+    }
+    if (!a.target || a.target.floor !== a.floor) return;
+    var speed = a.state === "chase" ? C.KILLER.chase : C.KILLER.patrol;
+    var done = false;
+    if (w.navGo) done = w.navGo(a, a.target.x, a.target.y, dt, speed);
+    else {
+      var dx = a.target.x - a.x, dy = a.target.y - a.y, d = Math.hypot(dx, dy) || 1;
+      w.__move(a, (dx / d) * speed * dt, (dy / d) * speed * dt, dt);
+      done = d < 0.25;
+    }
+    if (done || dist(a.x, a.y, a.target.x, a.target.y) < 0.4) {
+      a.target = null;
+      if (a.state === "chase") { a.state = "search"; a.chaseKid = null; }
+      else if (a.state === "patrol") a.checkedThisFloor = true;
     }
   }
 
   return {
     kidUpdate: kidUpdate,
     killerUpdate: killerUpdate,
-    steer: steer,
-    stairsTo: stairsTo
+    goStairZone: goStairZone,
+    doorFront: doorFront
   };
 })();
