@@ -57,12 +57,13 @@
       if (p.space === "car") { World.playerToggleCarDoor(true); return; }
       if (inStairZone) { World.playerTryStairs(1); return; }          // E = 上楼
       if (World.nearDoor()) { World.playerToggleDoor(); return; }
-      if (world.panelVisible()) callNearestCar();
+      if (world.panelVisible()) World.playerCallElevator(1);
       return;
     }
     if (a === "interactDown") {
       if (p.space === "car") { World.playerToggleCarDoor(false); return; }
       if (inStairZone) { World.playerTryStairs(-1); return; }          // Q = 下楼
+      if (world.panelVisible()) World.playerCallElevator(-1);
       return;
     }
     if (a === "space") {
@@ -90,12 +91,8 @@
     if (best) World.playerCallElevator(best.id);
   }
 
-  /** 面板上的 C / D 呼梯 */
-  function callCar(id) {
-    var p = world.player;
-    if (!p || !p.alive || over) return;
-    World.playerCallElevator(id);
-  }
+  function callUp() { World.playerCallElevator(1); }
+  function callDown() { World.playerCallElevator(-1); }
 
   function togglePause() {
     if (over) return;
@@ -139,7 +136,7 @@
         var navCar = World.navFind(p, { x: e.cx, y: g.hallY0 - 0.15 }) || [];
         setWalk(navCar.concat([{ x: e.cx, y: g.hallY0 - 0.15 }, { x: e.cx, y: car.y + car.h * 0.55 }]));
       } else if (Geom.inRect(g.hall, p.x, p.y, 0.35)) {
-        World.playerCallElevator(e.id);
+        World.playerCallElevator(1);
       } else {
         setWalk([{ x: g.hallCX, y: g.hallY0 + 1.0 }]);
       }
@@ -298,7 +295,7 @@
       resume: function () { paused = false; UI.showPause(false); },
       restart: function () { boot(); },
       pressCarFloor: function (f) { World.playerPressCarFloor(f); },
-    callCar: callCar,
+    callUp: callUp, callDown: callDown,
       openDoor: function () { World.playerToggleCarDoor(true); },
       closeDoor: function () { World.playerToggleCarDoor(false); },
       exitCar: function () { World.playerExitCar(); }

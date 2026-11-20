@@ -29,16 +29,14 @@
 
   <!-- 呼梯面板（靠近电梯才出现，鼠标按） -->
   <div id="callPanel" class="hidden">
-    <div class="cpTitle">呼梯</div>
-    <div class="cpRow" data-car="C">
-      <span class="cpName">C 梯</span>
-      <span class="cpRead" id="cpReadC">--</span>
-      <button class="cpBtn" id="cpBtnC" aria-label="叫 C 梯">呼</button>
+    <div class="cpTitle">呼 梯</div>
+    <div class="cpBtns">
+      <button class="cpArrow" id="cpUp" aria-label="我要上楼">▲<span>上</span></button>
+      <button class="cpArrow" id="cpDown" aria-label="我要下楼">▼<span>下</span></button>
     </div>
-    <div class="cpRow" data-car="D">
-      <span class="cpName">D 梯</span>
-      <span class="cpRead" id="cpReadD">--</span>
-      <button class="cpBtn" id="cpBtnD" aria-label="叫 D 梯">呼</button>
+    <div class="cpReads">
+      <div class="cpReadRow"><span class="cpName">C 梯</span><span class="cpRead" id="cpReadC">--</span></div>
+      <div class="cpReadRow"><span class="cpName">D 梯</span><span class="cpRead" id="cpReadD">--</span></div>
     </div>
   </div>
 

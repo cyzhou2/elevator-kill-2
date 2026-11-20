@@ -13,7 +13,7 @@ var UI = (function () {
   function init(g) {
     game = g;
     ["clock", "floorNo", "aliveNo", "hint", "carPanel", "carPanelTitle", "carFloors",
-      "carExit", "callPanel", "cpReadC", "cpReadD", "cpBtnC", "cpBtnD",
+      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown",
       "overlay", "overlayCard",
       "pause", "pauseResume", "pauseRestart", "joy", "knob", "staminaBar", "flashMsg"].forEach(function (k) {
       el[k] = $(k);
@@ -24,8 +24,8 @@ var UI = (function () {
     if (el.pauseResume) el.pauseResume.onclick = function () { game.resume(); };
     if (el.pauseRestart) el.pauseRestart.onclick = function () { game.restart(); };
     if (el.carExit) el.carExit.onclick = function () { game.exitCar && game.exitCar(); };
-    if (el.cpBtnC) el.cpBtnC.onclick = function () { game.callCar && game.callCar("C"); };
-    if (el.cpBtnD) el.cpBtnD.onclick = function () { game.callCar && game.callCar("D"); };
+    if (el.cpUp) el.cpUp.onclick = function () { game.callUp && game.callUp(); };
+    if (el.cpDown) el.cpDown.onclick = function () { game.callDown && game.callDown(); };
   }
 
   function buildCarPanel() {
@@ -124,8 +124,11 @@ var UI = (function () {
       var rc = carRead(W, "C"), rd = carRead(W, "D");
       el.cpReadC.innerHTML = '<span class="' + rc.cls + '">' + rc.text + "</span>";
       el.cpReadD.innerHTML = '<span class="' + rd.cls + '">' + rd.text + "</span>";
-      el.cpBtnC.classList.toggle("lit", W.hallCall[W.player.floor].has("C"));
-      el.cpBtnD.classList.toggle("lit", W.hallCall[W.player.floor].has("D"));
+      var fl = W.player.floor;
+      el.cpUp.classList.toggle("lit", !!W.hallUp[fl]);
+      el.cpDown.classList.toggle("lit", !!W.hallDown[fl]);
+      el.cpUp.disabled = !W.canCall(1);
+      el.cpDown.disabled = !W.canCall(-1);
     }
 
     /* 提示 */
@@ -152,7 +155,7 @@ var UI = (function () {
     if (Geom.inRect(g.hall, p.x, p.y, -0.05)) {
       var open = W.elevAt(p.floor).filter(function (e) { return e.doorsOpen; });
       if (open.length) return "门开着 · 走进轿厢";
-      return "点呼梯面板叫梯 · 或 <b>E</b> 叫最近的";
+      return "点面板 ▲/▼ 呼梯 · <b>E</b> 上 / <b>Q</b> 下";
     }
     return "";
   }

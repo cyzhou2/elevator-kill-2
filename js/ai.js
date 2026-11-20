@@ -302,8 +302,9 @@ var AI = (function () {
     if (!inHall) { if (w.navGo) w.navGo(a, G.hallCX, G.hallY0 + 1.1, dt, 1.75); return; }
     t.pressT = (t.pressT || 0) - dt;
     if (!t.pressed || t.pressT <= 0) {
-      w.state.hallCall[a.floor].add("C");
-      w.state.hallCall[a.floor].add("D");
+      var up = t.floor >= a.floor;
+      if (up && a.floor < w.cfg.FLOORS) w.state.hallUp[a.floor] = true;
+      if (!up && a.floor > 1) w.state.hallDown[a.floor] = true;
       t.pressed = true;
       t.pressT = 2.5;
     }

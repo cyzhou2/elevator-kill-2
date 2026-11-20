@@ -91,6 +91,14 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 想调节氛围密度：改 `ambTimer` 的重置公式（现在是 `12 - tension*7` 起步，越大越安静）。
 - 想调节音量：`CFG.AUDIO.master`，或单独改 `whisper(0.03 + tension*0.045)` 里的系数。
 
+## 1.7 呼梯模型（v1.3）
+
+- 状态是**按层按方向**的两个布尔：`world.hallUp[floor]` / `world.hallDown[floor]`，全楼共享，不绑定某部梯。
+- `hasCall(e, f, dir)`：车在 `dir` 方向上只认这一方向的呼梯（加上轿厢内选层），所以上楼时不会为下楼的人停。
+- 本层开门时清掉对应方向的呼梯；`dir===0`（待机/掉头）时两个方向一起清。
+- 端头限制在 `world.playerCallElevator(dir)` 与 `world.canCall(dir)` 里（1 楼不能下、20 楼不能上）。
+- 面板 UI：`#cpUp` / `#cpDown`，亮起 = 该方向已有人叫；`disabled` = 端头按不了。
+
 ## 2. 想改难度：只动这 5 个
 
 ```js
