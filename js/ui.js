@@ -143,7 +143,7 @@ var UI = (function () {
     if (p.space === "stair") return "楼梯上…";
     if (p.space === "car") return "点右侧楼层键选层 · <b>Space</b> 出门";
     var g = W.geom;
-    if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼（W/S 仍是平移）";
+    if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼";
     if (W.nearDoor && W.nearDoor()) {
       var L = W.nearDoor();
       var d = W.state.stairDoors[p.floor][L];

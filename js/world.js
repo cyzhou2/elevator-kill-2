@@ -427,6 +427,24 @@ var World = (function () {
     }
   }
 
+  /** 走到楼梯门前就顺手推开（寻路全程都用） */
+  function autoOpenDoor(a) {
+    if (!a || !a.alive || a.space !== "floor") return;
+    for (var i = 0; i < 2; i++) {
+      var L = i === 0 ? "A" : "B";
+      var dr = doorRect(a.floor, L);
+      var cx = dr.x + dr.w / 2, cy = dr.y + dr.h / 2;
+      if (dist(a.x, a.y, cx, cy) > 1.25) continue;
+      var d = W.stairDoors[a.floor][L];
+      if (d.open) continue;
+      d.open = true;
+      d.closeTimer = 0;
+      emitNoise(a.floor, cx, cy, Cfg.DOOR.noise, "door");
+      if (window.Audio2 && a.controlled) Audio2.door(true);
+      if (a.controlled) addEvent("你推开了楼梯间的门", "you", a.floor);
+    }
+  }
+
   /** 万一被挤进墙里/角落，把人推回最近的可站立点 */
   function unstick(a) {
     if (a.space !== "floor") return;
@@ -776,7 +794,7 @@ var World = (function () {
     playerPressCarFloor: playerPressCarFloor, playerToggleCarDoor: playerToggleCarDoor,
     playerExitCar: playerExitCar, nearDoor: nearDoor, nearStairs: nearStairs,
     dist: dist, rnd: rnd, clamp: clamp,
-    __move: moveActor, __unstick: function(a){ unstick(a); },
+    __move: moveActor, __unstick: function(a){ unstick(a); }, autoOpenDoor: autoOpenDoor,
     navFind: function (a, to) { return (typeof Nav !== "undefined" && Nav) ? Nav.find({ x: a.x, y: a.y }, to) : null; },
     navGo: function (a, tx, ty, dt, speed) { return (typeof Nav !== "undefined" && Nav) ? Nav.goTo(API, a, tx, ty, dt, speed) : false; },
     __elevators: function () { return W.elevators; }

@@ -7,6 +7,7 @@
 
 var Audio2 = (function () {
   var ctx = null, master = null, drone = null, noiseBuf = null;
+  var bus = null, reverb = null, wet = null, reverbIn = null;
   var ready = false, muted = false;
   var heartTimer = 0, heartRate = 58, tension = 0;
   var ambTimer = 12;
@@ -19,6 +20,32 @@ var Audio2 = (function () {
     master = ctx.createGain();
     master.gain.value = CFG.AUDIO.master;
     master.connect(ctx.destination);
+
+    /* 混响：用衰减噪声做一条 1.8 秒的脉冲响应，地下车库/楼道的感觉 */
+    var irLen = Math.floor(ctx.sampleRate * 1.8);
+    var ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+    for (var ch = 0; ch < 2; ch++) {
+      var dch = ir.getChannelData(ch);
+      for (var i = 0; i < irLen; i++) {
+        var t = i / irLen;
+        dch[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.6) * (1 - t * 0.2);
+      }
+    }
+    reverb = ctx.createConvolver();
+    reverb.buffer = ir;
+    wet = ctx.createGain();
+    wet.gain.value = 0.34;
+    reverb.connect(wet);
+    wet.connect(master);
+    master.dryGain = null;
+    reverbIn = ctx.createGain();
+    reverbIn.gain.value = 1;
+    reverbIn.connect(reverb);
+    /* 之后所有音效都汇到 bus（干声 + 混响） */
+    bus = ctx.createGain();
+    bus.gain.value = 1;
+    bus.connect(master);
+    bus.connect(reverbIn);
 
     /* 噪声缓冲（脚步/撞击都用它） */
     var len = Math.floor(ctx.sampleRate * 1.2);
@@ -65,7 +92,7 @@ var Audio2 = (function () {
     n.buffer = noiseBuf; n.loop = true;
     var ng = ctx.createGain(); ng.gain.value = 0.012;
     var bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 0.7;
-    n.connect(bp); bp.connect(ng); ng.connect(master);
+    n.connect(bp); bp.connect(ng); ng.connect(bus);
     n.start();
   }
 
@@ -78,7 +105,7 @@ var Audio2 = (function () {
     var g = ctx.createGain();
     g.gain.setValueAtTime(vol, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-    o.connect(g); g.connect(master);
+    o.connect(g); g.connect(bus);
     o.start(); o.stop(ctx.currentTime + dur + 0.05);
   }
 
@@ -94,7 +121,7 @@ var Audio2 = (function () {
     var g = ctx.createGain();
     g.gain.setValueAtTime(vol, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-    s.connect(f); f.connect(g); g.connect(master);
+    s.connect(f); f.connect(g); g.connect(bus);
     s.start(); s.stop(ctx.currentTime + dur + 0.02);
   }
 
@@ -117,7 +144,7 @@ var Audio2 = (function () {
       g.gain.setValueAtTime(0.0001, ctx.currentTime);
       g.gain.linearRampToValueAtTime(0.09, ctx.currentTime + 0.05);
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.42);
-      o.connect(f); f.connect(g); g.connect(master);
+      o.connect(f); f.connect(g); g.connect(bus);
       o.start(); o.stop(ctx.currentTime + 0.5);
       noiseBurst(0.3, 0.05, 700, 2);
     } else {
@@ -136,7 +163,7 @@ var Audio2 = (function () {
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.linearRampToValueAtTime(0.16 * (vol == null ? 1 : vol), t0 + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0008, t0 + 1.1);
-      o.connect(g); g.connect(master);
+      o.connect(g); g.connect(bus);
       o.start(t0); o.stop(t0 + 1.2);
     });
   }
@@ -159,7 +186,7 @@ var Audio2 = (function () {
     g.gain.setValueAtTime(0.0001, ctx.currentTime);
     g.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.05);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.85);
-    o.connect(f); f.connect(g); g.connect(master);
+    o.connect(f); f.connect(g); g.connect(bus);
     o.start(); o.stop(ctx.currentTime + 0.9);
   }
 
@@ -174,6 +201,118 @@ var Audio2 = (function () {
     var v = CFG.AUDIO.heartVol * strength;
     boom(46, 0.16, v * 0.9, "sine");
     setTimeout(function () { boom(40, 0.2, v * 0.62, "sine"); }, 165);
+  }
+
+  /* 耳语：两段带通噪声 + 慢速幅度摆动，听不清但让人不安 */
+  function whisper(vol) {
+    if (!ready || muted) return;
+    var s = ctx.createBufferSource();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    s.playbackRate.value = 0.55 + Math.random() * 0.3;
+    var f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 900 + Math.random() * 900;
+    f.Q.value = 6;
+    var g = ctx.createGain();
+    var t0 = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t0);
+    var n = 3 + Math.floor(Math.random() * 4);
+    for (var i = 0; i < n; i++) {
+      g.gain.linearRampToValueAtTime((vol || 0.05) * (0.4 + Math.random() * 0.6), t0 + 0.12 + i * 0.16);
+      g.gain.linearRampToValueAtTime(0.0005, t0 + 0.24 + i * 0.16);
+    }
+    s.connect(f); f.connect(g); g.connect(bus);
+    s.start(t0); s.stop(t0 + 0.2 + n * 0.16 + 0.2);
+  }
+
+  /* 木头裂开 / 楼板响一声 */
+  function creak(vol) {
+    if (!ready || muted) return;
+    var o = ctx.createOscillator();
+    o.type = "sawtooth";
+    var t0 = ctx.currentTime;
+    o.frequency.setValueAtTime(60 + Math.random() * 40, t0);
+    o.frequency.linearRampToValueAtTime(150 + Math.random() * 120, t0 + 0.9 + Math.random() * 0.5);
+    var f = ctx.createBiquadFilter();
+    f.type = "lowpass"; f.frequency.value = 700; f.Q.value = 6;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol || 0.05, t0 + 0.15);
+    g.gain.exponentialRampToValueAtTime(0.0008, t0 + 1.2);
+    o.connect(f); f.connect(g); g.connect(bus);
+    o.start(t0); o.stop(t0 + 1.3);
+  }
+
+  /* 很远的脚步（闷、慢、带混响） */
+  function farSteps(vol) {
+    if (!ready || muted) return;
+    var n = 2 + Math.floor(Math.random() * 3);
+    for (var i = 0; i < n; i++) {
+      (function (k) {
+        setTimeout(function () { noiseBurst(0.1, (vol || 0.05) * (1 - k * 0.15), 130, 0.9); }, k * (420 + Math.random() * 220));
+      })(i);
+    }
+  }
+
+  /* 呼吸：紧张时自动出现，越快越急 */
+  var breathT = 0;
+  function breath(rate, vol) {
+    if (!ready || muted) return;
+    var s = ctx.createBufferSource();
+    s.buffer = noiseBuf;
+    s.playbackRate.value = 0.7;
+    var f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 620;
+    f.Q.value = 1.4;
+    var g = ctx.createGain();
+    var t0 = ctx.currentTime;
+    var dur = Math.max(0.28, 1.5 - rate * 0.4);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol || 0.045, t0 + dur * 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+    s.connect(f); f.connect(g); g.connect(bus);
+    s.start(t0); s.stop(t0 + dur + 0.05);
+  }
+
+  /* 金属管道被敲一下（很空、很长的回声） */
+  function pipeKnock(vol) {
+    if (!ready || muted) return;
+    var o = ctx.createOscillator();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(180 + Math.random() * 240, ctx.currentTime);
+    var g = ctx.createGain();
+    var t0 = ctx.currentTime;
+    g.gain.setValueAtTime(vol || 0.05, t0);
+    g.gain.exponentialRampToValueAtTime(0.0006, t0 + 1.6);
+    o.connect(g); g.connect(bus);
+    o.start(t0); o.stop(t0 + 1.7);
+    noiseBurst(0.12, (vol || 0.05) * 0.8, 1200, 3);
+  }
+
+  /* 轿厢低频嗡鸣（坐电梯时），level 0~1 */
+  var humGain = null, humOsc = null;
+  function setCarHum(level) {
+    if (!ready) return;
+    if (!humGain) {
+      humGain = ctx.createGain();
+      humGain.gain.value = 0;
+      humGain.connect(bus);
+      humOsc = ctx.createOscillator();
+      humOsc.type = "sawtooth";
+      humOsc.frequency.value = 47;
+      var f = ctx.createBiquadFilter();
+      f.type = "lowpass"; f.frequency.value = 190;
+      humOsc.connect(f); f.connect(humGain);
+      humOsc.start();
+      var o2 = ctx.createOscillator();
+      o2.type = "sine"; o2.frequency.value = 94;
+      var g2 = ctx.createGain(); g2.gain.value = 0.5;
+      o2.connect(g2); g2.connect(humGain);
+      o2.start();
+    }
+    humGain.gain.value = Math.max(0, Math.min(1, level)) * 0.05;
   }
 
   function update(dt, tensionNow) {
@@ -191,15 +330,36 @@ var Audio2 = (function () {
     }
     /* 底噪随紧张度变厚 */
     if (drone) drone.gain.value = CFG.AUDIO.droneVol * (1 + tension * 1.6);
-    /* 环境偶发声响 */
+    /* 环境偶发声响：越紧张越密、越怪 */
     ambTimer -= dt;
-    if (ambTimer <= 0) { ambTimer = 9 + Math.random() * 16; distantClang(); }
+    if (ambTimer <= 0) {
+      ambTimer = (12 - tension * 7) + Math.random() * (10 - tension * 5);
+      var r = Math.random();
+      if (r < 0.34) distantClang();
+      else if (r < 0.56) creak(0.035 + tension * 0.03);
+      else if (r < 0.74) pipeKnock(0.03 + tension * 0.04);
+      else if (r < 0.9) farSteps(0.035 + tension * 0.03);
+      else whisper(0.03 + tension * 0.045);
+    }
+
+    /* 呼吸：紧张起来会听见自己喘 */
+    if (tension > 0.3) {
+      breathT -= dt;
+      if (breathT <= 0) {
+        breath(tension, 0.02 + tension * 0.05);
+        breathT = (2.6 - tension * 1.4) * (0.85 + Math.random() * 0.4);
+      }
+    } else {
+      breathT = Math.min(breathT, 0.8);
+    }
   }
 
   return {
     init: init, resume: resume, update: update,
     footstep: footstep, door: door, ding: ding,
     catchSound: catchSound, scream: scream,
+    whisper: whisper, creak: creak, farSteps: farSteps,
+    pipeKnock: pipeKnock, breath: breath, setCarHum: setCarHum,
     setMute: function (v) { muted = v; if (master) master.gain.value = muted ? 0 : CFG.AUDIO.master; },
     get muted() { return muted; },
     get ready() { return ready; }

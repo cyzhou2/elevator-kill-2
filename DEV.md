@@ -83,6 +83,14 @@ KILLER.thinkSec: 0.22   // 决策间隔
 
 小孩被追时的逃跑速度是 `KID.sprint * 0.70`（`ai.js` 的 `kidUpdate`）：调大更难抓，调小一追一个准。
 
+## 1.8 v1.2 新增
+
+- **自动开门**：`world.autoOpenDoor(a)`，任何寻路（玩家点击、AI 追击、上下楼）都会调用，半径 1.25 m。
+- **楼梯过场**：`render.js` 的 `drawStairScene()`，按 `player.stair` 的 `from/to/dir/t/dur` 画楼梯与进度；时长由 `STAIR.traverseSec` 控制。
+- **氛围音效**：`audio.js` 里 `whisper / creak / farSteps / pipeKnock / breath / setCarHum`，由 `update()` 的 `ambTimer` 按紧张度调度；混响用合成脉冲响应（`reverb`）。
+- 想调节氛围密度：改 `ambTimer` 的重置公式（现在是 `12 - tension*7` 起步，越大越安静）。
+- 想调节音量：`CFG.AUDIO.master`，或单独改 `whisper(0.03 + tension*0.045)` 里的系数。
+
 ## 2. 想改难度：只动这 5 个
 
 ```js

@@ -195,21 +195,8 @@ var Nav = (function () {
     opts = opts || {};
     if (!a.path || !a.path.length) return true;
 
-    /* 自动开门：附近有扇关着的楼梯门就推开 */
-    if (a.space === "floor") {
-      for (var i = 0; i < 2; i++) {
-        var L = i === 0 ? "A" : "B";
-        var dr = L === "A" ? w.geom.stairDoorA.rect : w.geom.stairDoorB.rect;
-        var cx = dr.x + dr.w / 2, cy = dr.y + dr.h / 2;
-        if (Math.hypot(a.x - cx, a.y - cy) < 1.15) {
-          var dd = w.state.stairDoors[a.floor][L];
-          if (!dd.open) {
-            dd.open = true; dd.closeTimer = 0;
-            w.emitNoise(a.floor, cx, cy, w.cfg.DOOR.noise, "door");
-          }
-        }
-      }
-    }
+    /* 自动开门：一路走过去，路上有门就推开 */
+    if (w.autoOpenDoor) w.autoOpenDoor(a);
 
     var t = a.path[0];
     var dx = t.x - a.x, dy = t.y - a.y;

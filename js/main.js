@@ -225,6 +225,7 @@
       World.playerCallElevator(pendingCall);
       pendingCall = null;
     }
+    World.autoOpenDoor(p);
     if (!walkTarget && walkPath.length) walkTarget = walkPath[0];
     if (walkTarget) {
       var ddx = walkTarget.x - p.x, ddy = walkTarget.y - p.y;
@@ -248,6 +249,14 @@
 
   function afterUpdate(dt) {
     Audio2.update(dt, world.tension || 0);
+    /* 轿厢低频嗡鸣 */
+    var pl = world.player;
+    if (pl && pl.space === "car") {
+      var ce = world.carById(pl.carId);
+      Audio2.setCarHum(ce && Math.abs(ce.floor - Math.round(ce.floor)) > 0.02 ? 1 : 0.45);
+    } else {
+      Audio2.setCarHum(0);
+    }
     var sp = world.player ? world.player.space : null;
     if (sp !== lastSpace) { lastSpace = sp; Render.layout(); }
     if (world.over) {

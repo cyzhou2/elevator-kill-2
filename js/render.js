@@ -465,6 +465,7 @@ var Render = (function () {
     time += dt || 0.016;
 
     if (view.inCar) { drawCarScene(world); return; }
+    if (world.player && world.player.space === "stair") { drawStairScene(world); return; }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -633,6 +634,124 @@ var Render = (function () {
     var vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.2, W / 2, H / 2, Math.max(W, H) * 0.72);
     vg.addColorStop(0, "rgba(0,0,0,0)");
     vg.addColorStop(1, "rgba(0,0,0,0.92)");
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+
+    crt(world, time);
+  }
+
+  /* ---------- 楼梯过场（上下楼时看到的楼梯） ---------- */
+  function drawStairScene(world) {
+    var p = world.player, s = p && p.stair;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#080a0a";
+    ctx.fillRect(0, 0, W, H);
+    if (!s) return;
+
+    var prog = Math.max(0, Math.min(1, s.t / s.dur));
+    var tt = s.dir > 0 ? prog : 1 - prog;
+
+    var n = 14;
+    var x0 = W * 0.12, x1 = W * 0.88;
+    var yB = H * 0.84, yT = H * 0.24;
+
+    /* 楼梯间墙面 */
+    var wall = ctx.createLinearGradient(0, 0, 0, H);
+    wall.addColorStop(0, "#0d1010");
+    wall.addColorStop(0.5, "#121616");
+    wall.addColorStop(1, "#0a0d0d");
+    ctx.fillStyle = wall;
+    ctx.fillRect(0, 0, W, H);
+
+    /* 台阶：踏面 + 踢面，下面填成实体，读起来才像楼梯 */
+    for (var i = 0; i < n; i++) {
+      var a0 = i / n, a1 = (i + 1) / n;
+      var xa = x0 + (x1 - x0) * a0, xb = x0 + (x1 - x0) * a1;
+      var ya = yB + (yT - yB) * a0;
+      /* 踏面（从这条线一直填到画面底部） */
+      ctx.fillStyle = i % 2 ? "#1b1f1f" : "#202525";
+      ctx.fillRect(xa, ya, xb - xa + 1, yB + 90 - ya);
+      /* 踏面前缘高光 */
+      ctx.strokeStyle = "rgba(190,200,196,0.10)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(xa, ya + 0.5);
+      ctx.lineTo(xb, ya + 0.5);
+      ctx.stroke();
+      /* 踢面阴影 */
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(xa, ya, 2, yB + 90 - ya);
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.beginPath();
+      ctx.moveTo(xa, ya);
+      ctx.lineTo(xa, yB + 90);
+      ctx.stroke();
+    }
+    /* 楼梯底面阴影 */
+    var sg = ctx.createLinearGradient(0, yT, 0, H);
+    sg.addColorStop(0, "rgba(0,0,0,0)");
+    sg.addColorStop(1, "rgba(0,0,0,0.75)");
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, yT, W, H - yT);
+
+    /* 扶手 */
+    ctx.strokeStyle = "#39413f";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x0 - 20, yB - 52);
+    ctx.lineTo(x1 + 20, yT - 52);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    for (var k = 0; k <= 6; k++) {
+      var t2 = k / 6;
+      var bx = x0 + (x1 - x0) * t2, by = yB + (yT - yB) * t2;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx, by - 52);
+      ctx.stroke();
+    }
+
+    /* 人物 */
+    var px = x0 + (x1 - x0) * tt;
+    var py = yB + (yT - yB) * tt;
+    var bob = Math.sin(s.t * 9) * 2;
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.beginPath(); ctx.ellipse(px + 4, py + 2, 15, 6, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = "#b7c4bf";
+    ctx.beginPath(); ctx.ellipse(px, py - 22 + bob, 11, 15, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = "#cdd8d4";
+    ctx.beginPath(); ctx.arc(px, py - 42 + bob, 8, 0, 6.283); ctx.fill();
+
+    /* 手电光 */
+    var lg = ctx.createRadialGradient(px, py - 22, 4, px, py - 22, 240);
+    lg.addColorStop(0, "rgba(214,190,130,0.16)");
+    lg.addColorStop(0.5, "rgba(160,150,110,0.06)");
+    lg.addColorStop(1, "rgba(120,120,90,0)");
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = lg;
+    ctx.beginPath(); ctx.arc(px, py - 22, 240, 0, 6.283); ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    /* 楼层字 */
+    ctx.font = "700 30px ui-monospace, monospace";
+    ctx.fillStyle = "rgba(230,217,182,0.92)";
+    ctx.textAlign = "left";
+    ctx.fillText(s.from + "F", 26, H - 64);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "rgba(201,168,106,0.9)";
+    ctx.fillText(s.to + "F", W - 26, 56);
+    ctx.textAlign = "left";
+
+    /* 进度条 */
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fillRect(26, H - 22, W - 52, 2);
+    ctx.fillStyle = "rgba(201,168,106,0.55)";
+    ctx.fillRect(26, H - 22, (W - 52) * prog, 2);
+
+    /* 暗角 */
+    var vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, "rgba(0,0,0,0.9)");
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, W, H);
 

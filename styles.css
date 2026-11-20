@@ -37,10 +37,14 @@ html, body {
   pointer-events: none;
   text-shadow: 0 1px 6px #000;
 }
-#hud .row1 { display: flex; align-items: baseline; gap: 7px; }
+#hud .row1 { display: flex; align-items: baseline; gap: 8px; }
 #clock { font-size: 26px; letter-spacing: 1px; color: #dfe7e3; font-variant-numeric: tabular-nums; }
 #hud .sep { color: #39413f; }
-#floorNo { font-size: 13px; color: var(--dim); letter-spacing: 1px; }
+#floorNo {
+  font-size: 30px; font-weight: 700; letter-spacing: 1px;
+  color: #e6d9b6; text-shadow: 0 0 14px rgba(201, 168, 106, .35);
+  font-variant-numeric: tabular-nums;
+}
 #hud .row2 { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 11px; color: var(--dim); }
 #hud .row2 b { color: #b9c4bf; font-weight: 500; }
 #hud .stam { display: inline-block; width: 62px; height: 3px; background: #1a1f1e; margin-left: 6px; }
