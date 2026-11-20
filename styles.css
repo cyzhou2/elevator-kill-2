@@ -30,6 +30,8 @@ html, body {
 
 #app { position: fixed; inset: 0; }
 #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* 底部控制条高度：画布让出这块，按钮就不会盖住地形 */
+:root { --ctl: 0px; }
 
 /* ---------------- HUD ---------------- */
 #hud {
@@ -125,7 +127,7 @@ body.touch .touchonly { display: block; }
   background: rgba(14, 18, 17, .78); border: 1px solid #2b3331; border-radius: 8px;
 }
 #btns .tb.on { background: rgba(90, 100, 95, .4); color: #e2eae6; }
-body.in-car #btns { display: none; }
+body.inCar #btns { display: none; }
 
 /* ---------------- 结算 ---------------- */
 #overlay {
@@ -184,20 +186,51 @@ body.in-car #btns { display: none; }
 
 /* ---------------- 竖屏 ---------------- */
 @media (max-width: 820px), (orientation: portrait) {
+  /* 竖屏：画面保持正向，底部让出 148px 给操作区 */
+  :root { --ctl: 148px; }
+  #stage { top: 0; left: 0; right: 0; width: 100%; height: calc(100vh - var(--ctl)); }
+
   #clock { font-size: 20px; }
-  #hint { bottom: 150px; font-size: 11px; }
-  #carPanel {
-    right: 8px; top: auto; bottom: 150px; transform: none;
-    width: 168px; padding: 9px;
+  #floorNo { font-size: 24px; }
+
+  /* 提示挪到画布上沿，别占操作区 */
+  #hint {
+    bottom: auto; top: 62px; left: 50%; transform: translateX(-50%);
+    max-width: 92vw; font-size: 11px;
   }
-  #carFloors { gap: 4px; }
-  #carFloors .cf { height: 26px; font-size: 10px; }
+
+  /* 摇杆 / 按键全部落进底部控制条 */
+  #joy { left: 16px; bottom: 16px; width: 96px; height: 96px; }
+  #joy i { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
+  #btns {
+    right: 14px; bottom: 12px;
+    grid-template-columns: repeat(2, 54px); gap: 7px;
+  }
+  #btns .tb { height: 46px; font-size: 12px; }
+
+  /* 面板也放进控制条 */
+  #callPanel, #stairPanel {
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(var(--ctl) + 8px);
+  }
+  #carPad { left: 16px; bottom: 12px; width: 112px; height: 112px; }
+  #carPad .cpad { width: 36px; height: 36px; font-size: 13px; }
+  #carPad [data-cm="up"] { left: 38px; }
+  #carPad [data-cm="down"] { left: 38px; }
+  #carPad [data-cm="left"] { top: 38px; }
+  #carPad [data-cm="right"] { top: 38px; }
+
+  #carPanel {
+    right: 8px; top: auto; bottom: calc(var(--ctl) + 8px); transform: none;
+    width: 172px; padding: 9px;
+    max-height: calc(100vh - var(--ctl) - 20px); overflow: auto;
+  }
 }
 
 
 /* ---------- 呼梯面板（靠近电梯出现） ---------- */
 #callPanel {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: 132px;
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--ctl) + 132px);
   width: 214px; padding: 8px 10px 9px;
   background: rgba(10, 13, 13, .92);
   border: 1px solid #2f3836; border-radius: 6px;
@@ -262,7 +295,7 @@ body.in-car #btns { display: none; }
 
 /* ---------- 楼梯面板 ---------- */
 #stairPanel {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: 132px;
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--ctl) + 132px);
   display: flex; gap: 10px; padding: 9px 12px;
   background: rgba(10, 13, 13, .92);
   border: 1px solid #2f3836; border-radius: 6px;
@@ -302,3 +335,60 @@ body.inCar #joy { display: none; }
 #carPad [data-cm="down"] { left: 45px; bottom: 0; }
 #carPad [data-cm="left"] { left: 0; top: 45px; }
 #carPad [data-cm="right"] { right: 0; top: 45px; }
+
+
+/* ---------------- 竖屏收尾（必须放最后，覆盖默认面板定位） ---------------- */
+@media (max-width: 820px), (orientation: portrait) {
+  body #callPanel, body #stairPanel {
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(var(--ctl) + 10px);
+  }
+  body #carPanel {
+    right: 8px; top: auto; bottom: calc(var(--ctl) + 10px); transform: none;
+  }
+  body #hint { bottom: auto; top: 62px; }
+
+  /* 轿厢方向键也必须在竖屏控制条里（后面默认规则会覆盖，所以这里提权） */
+  body #carPad { left: 16px; bottom: 14px; width: 112px; height: 112px; }
+  #carPad .cpad { width: 36px; height: 36px; font-size: 13px; }
+  body #carPad [data-cm="up"], body #carPad [data-cm="down"] { left: 38px; }
+  body #carPad [data-cm="left"], body #carPad [data-cm="right"] { top: 38px; }
+}
+
+
+/* ---------------- 横屏小屏 ---------------- */
+@media (max-height: 520px) {
+  :root { --ctl: 104px; }
+  #stage { top: 0; left: 0; right: 0; width: 100%; height: calc(100vh - var(--ctl)); }
+  #hint { bottom: auto; top: 54px; left: 50%; transform: translateX(-50%); font-size: 11px; }
+  #joy { left: 12px; bottom: 8px; width: 88px; height: 88px; }
+  #joy i { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
+  #btns { right: 12px; bottom: 6px; grid-template-columns: repeat(2, 50px); gap: 6px; }
+  #btns .tb { height: 42px; font-size: 12px; }
+  body #callPanel, body #stairPanel { bottom: calc(var(--ctl) + 8px); }
+  #carPad { left: 12px; bottom: 6px; width: 100px; height: 100px; }
+  #carPad .cpad { width: 32px; height: 32px; font-size: 12px; }
+  #carPad [data-cm="up"], #carPad [data-cm="down"] { left: 34px; }
+  #carPad [data-cm="left"], #carPad [data-cm="right"] { top: 34px; }
+  body #carPanel { bottom: calc(var(--ctl) + 8px); max-height: calc(100vh - var(--ctl) - 12px); overflow: auto; }
+
+  /* 横屏空间矮：呼梯面板压成一条横的，塞进控制条中间，别盖住地图 */
+  body #callPanel {
+    left: 50%; transform: translateX(-50%);
+    bottom: 8px; width: auto; max-width: 62vw;
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px;
+  }
+  #callPanel .cpTitle { display: none; }
+  #callPanel .cpBtns { margin: 0; gap: 6px; }
+  #callPanel .cpArrow { width: 46px; height: 40px; font-size: 15px; }
+  #callPanel .cpArrow span { font-size: 9px; letter-spacing: 1px; }
+  #callPanel .cpReads { border-top: none; padding-top: 0; display: flex; gap: 12px; }
+  #callPanel .cpReadRow { padding: 0; }
+  #callPanel .cpName { width: auto; }
+  #callPanel .cpRead { font-size: 12px; }
+
+  body #stairPanel { bottom: 8px; padding: 6px 10px; gap: 8px; }
+  #stairPanel .stBtn { width: 62px; height: 40px; font-size: 15px; }
+  #stairPanel .stBtn span { font-size: 9px; }
+}

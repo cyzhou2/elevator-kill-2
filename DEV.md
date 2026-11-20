@@ -141,6 +141,15 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 进轿厢时给 `<body>` 加 `inCar` 类，`styles.css` 用它隐藏摇杆（`body.inCar #joy{display:none}`）。
 - 想改键位/大小：`styles.css` 的 `#carPad` 与 `.cpad`。
 
+## 1.35 移动端布局（v1.6）
+
+- `styles.css` 顶部有一个变量 `:root{--ctl:0px}`，竖屏媒体查询里改成 `148px`，横屏小屏 `104px`。
+- 画布尺寸跟着它走：`#stage{ height: calc(100vh - var(--ctl)) }`。**注意** `#stage` 上有 `height:100%`，只改 `inset` 是无效的，必须显式写 height。
+- 所有浮层都用 `bottom: calc(var(--ctl) + N)` 定位，保证落在操作条里。
+- 面板的默认规则写在文件靠后，所以竖屏覆盖要用更高优先级（`body #callPanel`），或者把覆盖块放到文件最后。
+- 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
+- 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
+
 ## 2. 想改难度：只动这 5 个
 
 ```js

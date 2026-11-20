@@ -90,8 +90,9 @@ var Render = (function () {
     } else {
       b = { x: g.minX, y: g.viewMinY, w: g.width, h: g.viewHeight };
     }
-    var rotate = H > W * 1.12;
-    var availW = W - 20, availH = H - 20;
+    /* 竖屏也不再旋转画面：楼道永远是同一个朝向 */
+    var rotate = false;
+    var availW = W - (W < 640 ? 8 : 20), availH = H - (H < 640 ? 8 : 20);
     var s = rotate ? Math.min(availH / b.w, availW / b.h) : Math.min(availW / b.w, availH / b.h);
     view = {
       s: s,
