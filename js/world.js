@@ -237,8 +237,16 @@ var World = (function () {
       return;
     }
 
-    if (canStand(a.floor, nx, a.y, r)) a.x = nx;
-    if (canStand(a.floor, a.x, ny, r)) a.y = ny;
+    /* 撞墙时按比例退让，别整个人卡在离墙 1 厘米的地方动不了 */
+    var FR = [1, 0.75, 0.5, 0.35, 0.25, 0.15, 0.08];
+    for (var fi = 0; fi < FR.length; fi++) {
+      var cx2 = a.x + dx * FR[fi];
+      if (canStand(a.floor, cx2, a.y, r)) { a.x = cx2; break; }
+    }
+    for (var fj = 0; fj < FR.length; fj++) {
+      var cy2 = a.y + dy * FR[fj];
+      if (canStand(a.floor, a.x, cy2, r)) { a.y = cy2; break; }
+    }
 
     /* 走进电梯井 = 进轿厢 */
     for (var i = 0; i < W.elevators.length; i++) {
