@@ -405,7 +405,9 @@ var Render = (function () {
     c.scale(bakeS, bakeS);
 
     var powered = !!(World.power && World.power[world.viewFloor]);
+    var flick = World.flicker || 0;
     var dark = view.inCar ? 0.82 : (powered ? 0.7 : 0.865);
+    dark = Math.min(0.97, dark + flick * 0.22);
     c.globalCompositeOperation = "source-over";
     c.fillStyle = "rgba(2,3,3," + dark + ")";
     c.fillRect(g.minX, g.minY, g.width, g.height);
@@ -669,16 +671,48 @@ var Render = (function () {
     ctx.fillStyle = slit;
     ctx.fillRect(x0, y1 - 10, boxW, 24);
 
-    /* 玩家 */
-    if (p && p.alive) {
-      var cx = x0 + boxW * 0.5, cy = y0 + boxH * 0.52;
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.beginPath(); ctx.ellipse(cx + 3, cy + 5, 17, 10, 0, 0, 6.283); ctx.fill();
-      ctx.fillStyle = "#b3c1bc";
-      ctx.beginPath(); ctx.ellipse(cx, cy, 15, 12, 0, 0, 6.283); ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = "#c9d5d0";
-      ctx.beginPath(); ctx.arc(cx, cy - 2, 8, 0, 6.283); ctx.fill();
+    /* 轿厢里所有人：按真实坐标换算，别人就在你旁边 */
+    var gg = World.geom;
+    var carRect = e ? (e.id === "C" ? gg.elev.C.car : gg.elev.D.car) : null;
+    if (carRect && world.actors) {
+      var boxPt = function (ax, ay) {
+        return {
+          x: x0 + ((ax - carRect.x) / carRect.w) * boxW,
+          y: y0 + ((ay - carRect.y) / carRect.h) * boxH
+        };
+      };
+      var list = world.actors.slice().sort(function (a, b) {
+        return (a.controlled ? 1 : 0) - (b.controlled ? 1 : 0);
+      });
+      for (var ai = 0; ai < list.length; ai++) {
+        var av = list[ai];
+        if (!av.alive) continue;
+        if (av.space !== "car" || av.carId !== (e && e.id)) continue;
+        var q = boxPt(av.x, av.y);
+        if (av.kind === "killer") {
+          /* 很高、很黑，只有一点红光 */
+          var flick2 = 0.72 + Math.sin(world.time * 2.7) * 0.12;
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.beginPath(); ctx.ellipse(q.x + 4, q.y + 12, 16, 9, 0, 0, 6.283); ctx.fill();
+          ctx.fillStyle = "#07080a";
+          ctx.beginPath(); ctx.ellipse(q.x, q.y - 6, 15, 26, 0, 0, 6.283); ctx.fill();
+          ctx.fillStyle = "#0b0c0e";
+          ctx.beginPath(); ctx.arc(q.x, q.y - 30, 11, 0, 6.283); ctx.fill();
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          ctx.fillStyle = "rgba(190,60,50," + (0.5 * flick2).toFixed(2) + ")";
+          ctx.beginPath(); ctx.arc(q.x - 3, q.y - 31, 1.7, 0, 6.283); ctx.fill();
+          ctx.beginPath(); ctx.arc(q.x + 3, q.y - 31, 1.7, 0, 6.283); ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
+          ctx.beginPath(); ctx.ellipse(q.x + 3, q.y + 7, 12, 7, 0, 0, 6.283); ctx.fill();
+          ctx.fillStyle = av.controlled ? "#b3c1bc" : "#8f9c97";
+          ctx.beginPath(); ctx.ellipse(q.x, q.y, 12, 10, 0, 0, 6.283); ctx.fill();
+          ctx.fillStyle = av.controlled ? "#c9d5d0" : "#9aa7a2";
+          ctx.beginPath(); ctx.arc(q.x, q.y - 2, 7, 0, 6.283); ctx.fill();
+        }
+      }
     }
 
     /* 暗角 */
@@ -1116,6 +1150,8 @@ var Render = (function () {
   }
 
   function crt(world, t) {
+    var flickAmt = World.flicker || 0;
+    var dread = World.carDread || 0;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var L = CFG.LOOK;
@@ -1129,7 +1165,7 @@ var Render = (function () {
     /* 颗粒 */
     if (grainPat) {
       ctx.save();
-      ctx.globalAlpha = L.grain;
+      ctx.globalAlpha = Math.min(0.24, L.grain * (1 + flickAmt * 2.4 + dread * 1.1));
       ctx.globalCompositeOperation = "overlay";
       ctx.translate((Math.random() * 160) | 0, (Math.random() * 160) | 0);
       ctx.fillStyle = grainPat;
@@ -1145,6 +1181,24 @@ var Render = (function () {
     ctx.fillRect(0, 0, W, H);
 
     /* 紧张时四周渗血 */
+    /* 轿厢里有别人：四周压得更死 */
+    if (dread > 0.01) {
+      var dv = ctx.createRadialGradient(W / 2, H * 0.5, Math.min(W, H) * 0.18, W / 2, H * 0.5, Math.max(W, H) * 0.62);
+      dv.addColorStop(0, "rgba(0,0,0,0)");
+      dv.addColorStop(1, "rgba(0,0,0," + (0.55 * dread).toFixed(3) + ")");
+      ctx.fillStyle = dv;
+      ctx.fillRect(0, 0, W, H);
+      var rp = 0.5 + 0.5 * Math.sin(t * 2.4);
+      ctx.fillStyle = "rgba(120,30,26," + (0.05 * dread * rp).toFixed(3) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    /* 灯闪：整屏压黑一下，边缘抽搐 */
+    if (flickAmt > 0.01) {
+      ctx.fillStyle = "rgba(0,0,0," + (0.34 * flickAmt).toFixed(3) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
+
     var tn = world.tension || 0;
     if (tn > 0.02) {
       var pulse = 0.55 + Math.sin(t * 7) * 0.45;

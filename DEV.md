@@ -150,7 +150,30 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
-## 1.05 威胁曲线与「没有倒计时」（v2.1）
+## 0.9 恐怖氛围系统（v2.2）
+
+### 音乐层（`audio.js`）
+
+| 函数 | 作用 |
+| --- | --- |
+| `startMusic()` | 第一次点击/按键时启动：铺底 pad + 风声，渐变入场 6 秒 |
+| `setMusicTension(t)` | 每帧调用：pad 音量 `0.028 + t*0.075`、滤波 `200 + t*300`、调式根音 55 / 51.9 / 58.3 三档 |
+| `motif(vol)` | 八音盒走音旋律（小调音阶 + 0.29s 延迟反馈） |
+| `stinger()` | 三全音上冲 + 撞击，`ai.js` 里进入 chase 时触发 |
+| `silenceDrop(sec)` | 把 `bus.gain` 压到 0.0005 一到两秒再抬回来 |
+
+### 惊吓调度（`world.js`）
+
+- `triggerScare(kind)`：`flicker` / `slam` / `whisper` / `silence` / `ding`，不传 kind 就按权重随机。
+- 每 22~46 秒自动触发一次；`W.flicker` 是 1→0 的衰减量，`render.js` 用它压暗环境光 + 加颗粒 + 叠一层黑。
+- 想调频率：`W.scareTimer = rnd(22, 46)`（`world.js` 的 `update` 里）。
+
+### 同乘恐惧
+
+- `W.carDread`：玩家和任何活着的角色在同一轿厢 → 1。
+- `render.js` 用它：额外暗角 + 极轻红色呼吸 + 颗粒；轿厢里的人按真实坐标绘制（`drawCarScene` 里的 `boxPt`）。
+
+## 1.05 威胁曲线与「没有倒计时」（v2.1）与「没有倒计时」（v2.1）
 
 ```js
 THREAT: { base: 1.0, perFuse: 0.05, perMinute: 0.02, max: 1.25 }

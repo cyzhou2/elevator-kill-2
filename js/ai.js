@@ -175,6 +175,7 @@ var AI = (function () {
       best = kid; bd = d;
     }
     if (best) {
+      if (a.state !== "chase" && window.Audio2 && window.Audio2.stinger) Audio2.stinger();
       a.state = "chase";
       a.chaseKid = best.id;
       a.target = { x: best.x, y: best.y, floor: best.floor };

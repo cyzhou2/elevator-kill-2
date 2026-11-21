@@ -250,6 +250,7 @@
 
   function afterUpdate(dt) {
     Audio2.update(dt, world.tension || 0);
+    Audio2.setMusicTension(world.tension || 0);
     /* 轿厢低频嗡鸣 */
     var pl = world.player;
     if (pl && pl.space === "car") {
@@ -293,6 +294,15 @@
   });
 
   function start() {
+    var bootMusic = function () {
+      Audio2.resume && Audio2.resume();
+      Audio2.startMusic && Audio2.startMusic();
+      window.removeEventListener("pointerdown", bootMusic);
+      window.removeEventListener("keydown", bootMusic);
+    };
+    window.addEventListener("pointerdown", bootMusic);
+    window.addEventListener("keydown", bootMusic);
+
     Render.init(document.getElementById("stage"));
     Input.init(null);
     UI.init({

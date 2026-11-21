@@ -368,6 +368,148 @@ var Audio2 = (function () {
     o.start(t0); o.stop(t0 + 1.9);
   }
 
+  /* ---------------- 环境音乐 ---------------- */
+  var music = null;
+
+  function startMusic() {
+    if (!ready || music) return;
+    /* 低频铺底：两个略微失谐的锯齿波，慢速滤波摆动 —— 一直有个"嗡嗡的不对劲" */
+    var padGain = ctx.createGain();
+    padGain.gain.value = 0.0001;
+    padGain.connect(bus);
+
+    var padFilter = ctx.createBiquadFilter();
+    padFilter.type = "lowpass";
+    padFilter.frequency.value = 210;
+    padFilter.Q.value = 2.2;
+    padFilter.connect(padGain);
+
+    var oscA = ctx.createOscillator();
+    oscA.type = "sawtooth";
+    oscA.frequency.value = 55;            // A1
+    var oscB = ctx.createOscillator();
+    oscB.type = "sawtooth";
+    oscB.frequency.value = 55 * 1.006;    // 轻微失谐 → 缓慢拍频
+    var oscC = ctx.createOscillator();
+    oscC.type = "sine";
+    oscC.frequency.value = 27.5;          // 低八度
+    var cg = ctx.createGain();
+    cg.gain.value = 0.5;
+    oscA.connect(padFilter);
+    oscB.connect(padFilter);
+    oscC.connect(cg); cg.connect(padGain);
+    oscA.start(); oscB.start(); oscC.start();
+
+    /* 滤波器慢摆（0.045 Hz） */
+    var lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.045;
+    var lfoGain = ctx.createGain();
+    lfoGain.gain.value = 90;
+    lfo.connect(lfoGain);
+    lfoGain.connect(padFilter.frequency);
+    lfo.start();
+
+    /* 高频"风声"薄片 */
+    var air = ctx.createBufferSource();
+    air.buffer = noiseBuf;
+    air.loop = true;
+    var airF = ctx.createBiquadFilter();
+    airF.type = "bandpass";
+    airF.frequency.value = 1400;
+    airF.Q.value = 0.6;
+    var airG = ctx.createGain();
+    airG.gain.value = 0.006;
+    air.connect(airF); airF.connect(airG); airG.connect(bus);
+    air.start();
+
+    music = { pad: padGain, padFilter: padFilter, oscA: oscA, oscB: oscB, air: airG, root: 55 };
+
+    /* 铺底音量随紧张度：平时几乎听不见，靠近它时慢慢压上来 */
+    padGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    padGain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 6);
+  }
+
+  /** 每帧把紧张度写进音乐（0~1） */
+  function setMusicTension(t) {
+    if (!ready || !music) return;
+    var now = ctx.currentTime;
+    music.pad.gain.setTargetAtTime(0.028 + t * 0.075, now, 0.9);
+    music.padFilter.frequency.setTargetAtTime(200 + t * 300, now, 1.2);
+    music.air.gain.setTargetAtTime(0.004 + t * 0.014, now, 1.0);
+    /* 调式随紧张度往上顶半音（越慌越刺耳） */
+    var rootTarget = t > 0.72 ? 58.27 : t > 0.4 ? 51.91 : 55;
+    if (Math.abs(rootTarget - music.root) > 0.5) {
+      music.root = rootTarget;
+      music.oscA.frequency.setTargetAtTime(rootTarget, now, 2.5);
+      music.oscB.frequency.setTargetAtTime(rootTarget * 1.006, now, 2.5);
+    }
+  }
+
+  /** 八音盒式的走音旋律 —— 随机、稀疏、带延迟回声 */
+  function motif(vol) {
+    if (!ready || muted) return;
+    var scale = [0, 3, 5, 7, 10, 12, 15];   // 小调五声 + 延伸
+    var base = 220 * (Math.random() < 0.5 ? 1 : 0.5);
+    var n = 3 + Math.floor(Math.random() * 4);
+    var delay = ctx.createDelay(1.0);
+    delay.delayTime.value = 0.29;
+    var fb = ctx.createGain();
+    fb.gain.value = 0.34;
+    var dg = ctx.createGain();
+    dg.gain.value = 0.5;
+    delay.connect(fb); fb.connect(delay);
+    delay.connect(dg); dg.connect(bus);
+    var t0 = ctx.currentTime + 0.05;
+    for (var i = 0; i < n; i++) {
+      var o = ctx.createOscillator();
+      o.type = "triangle";
+      var semi = scale[Math.floor(Math.random() * scale.length)];
+      o.frequency.value = base * Math.pow(2, semi / 12);
+      var g = ctx.createGain();
+      var at = t0 + i * (0.42 + Math.random() * 0.5);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.linearRampToValueAtTime((vol || 0.05) * (0.6 + Math.random() * 0.4), at + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0006, at + 1.5);
+      o.connect(g); g.connect(bus); g.connect(delay);
+      o.start(at); o.stop(at + 1.6);
+    }
+  }
+
+  /** 被发现的瞬间：三全音上冲 + 低频撞击 */
+  function stinger() {
+    if (!ready || muted) return;
+    var t0 = ctx.currentTime;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(0.11, t0 + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0006, t0 + 1.8);
+    g.connect(bus);
+    [1, 1.4142, 2.11].forEach(function (mul, k) {
+      var o = ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(90 * mul, t0);
+      o.frequency.exponentialRampToValueAtTime(320 * mul, t0 + 0.5);
+      var og = ctx.createGain();
+      og.gain.value = 0.33 / (k + 1);
+      o.connect(og); og.connect(g);
+      o.start(t0); o.stop(t0 + 1.9);
+    });
+    noiseBurst(0.4, 0.16, 90, 0.8);
+  }
+
+  /** 突然的静默：所有声音被"抽走"一两秒 —— 比加声音更吓人 */
+  function silenceDrop(sec) {
+    if (!ready) return;
+    var t0 = ctx.currentTime;
+    var hold = sec || 1.4;
+    bus.gain.cancelScheduledValues(t0);
+    bus.gain.setValueAtTime(bus.gain.value, t0);
+    bus.gain.linearRampToValueAtTime(0.0005, t0 + 0.06);
+    bus.gain.setValueAtTime(0.0005, t0 + hold);
+    bus.gain.linearRampToValueAtTime(1, t0 + hold + 0.9);
+  }
+
   function update(dt, tensionNow) {
     if (!ready) return;
     tension = tensionNow;
@@ -414,6 +556,8 @@ var Audio2 = (function () {
     whisper: whisper, creak: creak, farSteps: farSteps,
     pipeKnock: pipeKnock, breath: breath, setCarHum: setCarHum,
     repair: repair, powerOn: powerOn, hurt: hurt,
+    startMusic: startMusic, setMusicTension: setMusicTension, motif: motif,
+    stinger: stinger, silenceDrop: silenceDrop,
     setMute: function (v) { muted = v; if (master) master.gain.value = muted ? 0 : CFG.AUDIO.master; },
     get muted() { return muted; },
     get ready() { return ready; }

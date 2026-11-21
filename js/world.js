@@ -62,7 +62,7 @@ var World = (function () {
     W.tension = 0; W.heartbeat = 0; W.lastSeenKiller = null;
 
     W.hallUp = []; W.hallDown = []; W.stairDoors = [];
-    W.threat = 1; W.fuses = []; W.power = []; W.repair = null; W.lives = (cfg.PLAYER && cfg.PLAYER.lives) || 2; W.escaped = false;
+    W.threat = 1; W.flicker = 0; W.scare = null; W.scareTimer = rnd(24, 44); W.carDread = 0; W.fuses = []; W.power = []; W.repair = null; W.lives = (cfg.PLAYER && cfg.PLAYER.lives) || 2; W.escaped = false;
     for (var pf0 = 0; pf0 <= cfg.FLOORS; pf0++) W.power[pf0] = false;
     for (var f = 0; f <= cfg.FLOORS; f++) {
       W.hallUp[f] = false;
@@ -294,6 +294,34 @@ var World = (function () {
     if (!p || !p.alive || p.space !== "floor" || p.floor !== 1) return false;
     var ex = G.hallCX - 1.6, ey = G.hallY0 + 0.55;
     return dist(p.x, p.y, ex, ey) < 1.1;
+  }
+
+  /** 随机惊吓事件：kind 省略则按权重随机（也方便测试/调试强制触发） */
+  function triggerScare(kind) {
+    var tn = W.tension || 0;
+    var k = kind;
+    if (!k) {
+      var roll = rand();
+      k = roll < 0.34 ? "flicker" : roll < 0.56 ? "slam" : roll < 0.72 ? "whisper" : roll < 0.86 ? "silence" : "ding";
+    }
+    if (k === "flicker") {
+      W.scare = { kind: "flicker", t: W.time, dur: 0.9 + rand() * 0.9 };
+      W.flicker = 1;
+      if (window.Audio2) Audio2.creak(0.05);
+    } else if (k === "slam") {
+      var sf = 1 + Math.floor(rand() * Cfg.FLOORS);
+      emitNoise(sf, rnd(4, G.L - 4), G.corridor.h / 2, 9, "slam");
+      if (window.Audio2) Audio2.door(false);
+      addEvent(sf + "F 传来一声门响", "sys", sf);
+    } else if (k === "whisper") {
+      if (window.Audio2) Audio2.whisper(0.05 + tn * 0.05);
+    } else if (k === "silence") {
+      if (window.Audio2) Audio2.silenceDrop(1.1 + rand() * 0.8);
+    } else if (k === "ding") {
+      if (window.Audio2) Audio2.ding(0.35);
+      addEvent("电梯自己叮了一声", "sys", W.player ? W.player.floor : null);
+    }
+    return k;
   }
 
   /** 每帧推进修理 */
@@ -863,6 +891,24 @@ var World = (function () {
     /* 紧张度 & 心跳 */
     updateTension(dt);
 
+    /* ---------- 惊吓事件 ---------- */
+    W.flicker = Math.max(0, W.flicker - dt * 1.6);
+    if (W.scareTimer > 0) W.scareTimer -= dt;
+    else {
+      W.scareTimer = rnd(22, 46);
+      triggerScare();
+    }
+
+    /* 车里如果有"别人"，压迫感拉满 */
+    W.carDread = 0;
+    if (W.player && W.player.space === "car") {
+      for (var di = 0; di < W.actors.length; di++) {
+        var da = W.actors[di];
+        if (da === W.player || !da.alive) continue;
+        if (da.space === "car" && da.carId === W.player.carId) { W.carDread = 1; break; }
+      }
+    }
+
     /* 威胁值：修得越多、拖得越久，它越快 */
     var TH = Cfg.THREAT || { base: 1, perFuse: 0.06, perMinute: 0.03, max: 1.45 };
     W.threat = Math.min(TH.max, TH.base + fusesDone() * TH.perFuse + (W.time / 60) * TH.perMinute);
@@ -1172,6 +1218,9 @@ var World = (function () {
     allFusesDone: allFusesDone,
     get lives() { return W.lives; },
     get threat() { return W.threat || 1; },
+    get flicker() { return W.flicker || 0; },
+    triggerScare: triggerScare,
+    get carDread() { return W.carDread || 0; },
     get repair() { return W.repair; },
     get power() { return W.power; },
     nearFuse: nearFuse,
