@@ -580,9 +580,14 @@ var Render = (function () {
     ctx.fillStyle = "#0b0d0e";
     ctx.fillRect(0, 0, W, H);
 
-    var boxW = Math.min(W * 0.56, 620);
-    var boxH = Math.min(H * 0.8, boxW * 1.02);
-    var x0 = W * 0.5 - boxW * 0.62, y0 = H * 0.5 - boxH * 0.5;
+    /* 窄屏时右侧是楼层面板，轿厢画面只占左边，避免被面板压住 */
+    var compact = W < 700;
+    var panelW = compact ? (W < 460 ? 168 : 190) : 0;
+    var availW = W - panelW - 24;
+    var boxW = Math.min(compact ? availW : W * 0.56, 620);
+    var boxH = Math.min(H - 24, boxW * 1.02);
+    var x0 = compact ? 12 : W * 0.5 - boxW * 0.62;
+    var y0 = H * 0.5 - boxH * 0.5;
     var x1 = x0 + boxW, y1 = y0 + boxH;
 
     /* 轿厢地板 */

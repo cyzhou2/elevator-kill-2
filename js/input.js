@@ -60,8 +60,15 @@ var Input = (function () {
         padOn[dir] = on;
         b.classList.toggle("on", on);
       };
-      b.addEventListener("pointerdown", function (e) { e.preventDefault(); set(true); });
-      b.addEventListener("pointerup", function () { set(false); });
+      b.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        set(true);
+        try { b.setPointerCapture(e.pointerId); } catch (err) { /* 老浏览器忽略 */ }
+      });
+      b.addEventListener("pointerup", function (e) {
+        set(false);
+        try { b.releasePointerCapture(e.pointerId); } catch (err) {}
+      });
       b.addEventListener("pointerleave", function () { set(false); });
       b.addEventListener("pointercancel", function () { set(false); });
       b.addEventListener("contextmenu", function (e) { e.preventDefault(); });
@@ -146,10 +153,20 @@ var Input = (function () {
 
   function clearClick() { clickTarget = null; }
 
+  function clearPad() {
+    padOn.up = padOn.down = padOn.left = padOn.right = false;
+    var bs = document.querySelectorAll("[data-cm]");
+    for (var k = 0; k < bs.length; k++) bs[k].classList.remove("on");
+  }
+  window.addEventListener("blur", clearPad);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) clearPad();
+  });
+
   return {
     init: init, poll: poll, consume: consume,
     get clickTarget() { return clickTarget; },
-    clearClick: clearClick,
+    clearClick: clearClick, clearPad: clearPad,
     get joystick() { return joy; }
   };
 })();

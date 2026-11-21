@@ -9,7 +9,7 @@
 
 var CFG = {
   /* ---------- 版本 ---------- */
-  VERSION: "v1.6",
+  VERSION: "v1.7",
   TITLE: "电梯公寓大逃杀 2",
 
   /* ---------- 楼体（★ 与美术/版面直接相关） ---------- */
@@ -30,7 +30,12 @@ var CFG = {
   ROUND_SEC: 300,        // 一局时长
   KIDS: 3,               // 小孩数（含玩家）
   KILLERS: 2,            // 杀人犯数
-  START_FLOOR: 1,        // 玩家起始楼层
+  START_FLOOR: 1,        // 玩家起始楼层（SPAWN.random 为 false 时才用这个）
+  SPAWN: {
+    random: true,        // 每局随机出生楼层
+    minFloor: 2,
+    maxFloor: 19
+  },
 
   /* ---------- 角色 ---------- */
   KID: {

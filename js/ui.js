@@ -13,7 +13,7 @@ var UI = (function () {
   function init(g) {
     game = g;
     ["clock", "floorNo", "aliveNo", "hint", "carPanel", "carPanelTitle", "carFloors",
-      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown", "carPad",
+      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown", "carPad", "carActs",
       "overlay", "overlayCard",
       "pause", "pauseResume", "pauseRestart", "joy", "knob", "staminaBar", "flashMsg"].forEach(function (k) {
       el[k] = $(k);
@@ -24,6 +24,15 @@ var UI = (function () {
     if (el.pauseResume) el.pauseResume.onclick = function () { game.resume(); };
     if (el.pauseRestart) el.pauseRestart.onclick = function () { game.restart(); };
     if (el.carExit) el.carExit.onclick = function () { game.exitCar && game.exitCar(); };
+    var carActs = document.querySelectorAll("[data-cact]");
+    carActs.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var a = b.dataset.cact;
+        if (a === "open") game.openDoor && game.openDoor();
+        else if (a === "close") game.closeDoor && game.closeDoor();
+        else if (a === "exit") game.exitCar && game.exitCar();
+      });
+    });
     if (el.cpUp) el.cpUp.onclick = function () { game.callUp && game.callUp(); };
     if (el.stUp) el.stUp.onclick = function () { game.stairUp && game.stairUp(); };
     if (el.stDown) el.stDown.onclick = function () { game.stairDown && game.stairDown(); };
@@ -121,6 +130,7 @@ var UI = (function () {
     if (showPad !== lastCarPad) {
       lastCarPad = showPad;
       el.carPad.classList.toggle("hidden", !showPad);
+      if (el.carActs) el.carActs.classList.toggle("hidden", !showPad);
       document.body.classList.toggle("inCar", showPad);
     }
 
@@ -165,7 +175,7 @@ var UI = (function () {
     var p = W.player;
     if (!p.alive) return "";
     if (p.space === "stair") return "楼梯上…";
-    if (p.space === "car") return "左下方向键走动 · 右侧选层 · <b>Space</b> 出门";
+    if (p.space === "car") return "左下方向键走动 · 右侧选层 · 右下 <b>出</b> 出门";
     var g = W.geom;
     if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼";
     if (W.nearDoor && W.nearDoor()) {

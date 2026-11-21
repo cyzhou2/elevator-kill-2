@@ -70,8 +70,17 @@ var World = (function () {
       { id: "D", floor: cfg.FLOORS, dir: 0, state: "idle", timer: 0, calls: new Set(), doorsOpen: false, openAmt: 0, cx: G.elev.D.cx, car: G.elev.D.car, tag: "D" }
     ];
 
-    /* —— 玩家：一个小孩 —— */
-    var p = spawnKid(0, cfg.START_FLOOR, G.corridor.x + 1.6, G.corridor.y + G.corridor.h / 2);
+    /* —— 玩家：一个小孩（随机楼层，不再永远 1F） —— */
+    var sp = cfg.SPAWN || {};
+    var pf = cfg.START_FLOOR;
+    if (sp.random !== false) {
+      var lo = Math.max(2, sp.minFloor || 2);
+      var hi = Math.min(cfg.FLOORS - 1, sp.maxFloor || cfg.FLOORS - 1);
+      if (hi < lo) { lo = 1; hi = cfg.FLOORS; }
+      pf = lo + Math.floor(rand() * (hi - lo + 1));
+    }
+    var px0 = rnd(G.corridor.x + 1.2, G.corridor.x + G.corridor.w - 1.2);
+    var p = spawnKid(0, pf, px0, G.corridor.y + G.corridor.h / 2);
     p.controlled = true;
     W.player = p;
     W.actors.push(p);
@@ -79,12 +88,22 @@ var World = (function () {
     /* —— 其余小孩：随机楼层 —— */
     for (var i = 1; i < cfg.KIDS; i++) {
       var fk = 1 + Math.floor(rand() * cfg.FLOORS);
+      if (fk === p.floor) fk = fk >= cfg.FLOORS ? 1 : fk + 1;
       W.actors.push(spawnKid(i, fk, rnd(4, G.L - 4), rnd(0.7, G.corridor.h - 0.7)));
     }
 
     /* —— 杀人犯：撒在楼上 —— */
+    var taken = [p.floor];
     for (var k = 0; k < cfg.KILLERS; k++) {
-      var fq = clamp(cfg.FLOORS - k * 4, 2, cfg.FLOORS);
+      /* 离玩家至少 4 层，两个杀人犯也别叠在一起 */
+      var pool = [];
+      for (var fq2 = 1; fq2 <= cfg.FLOORS; fq2++) {
+        if (Math.abs(fq2 - p.floor) < 4) continue;
+        if (taken.indexOf(fq2) >= 0) continue;
+        pool.push(fq2);
+      }
+      var fq = pool.length ? pool[Math.floor(rand() * pool.length)] : clamp(cfg.FLOORS - k * 4, 1, cfg.FLOORS);
+      taken.push(fq);
       var kk = spawnKiller(k, fq, rnd(4, G.L - 4), rnd(0.7, G.corridor.h - 0.7));
       W.actors.push(kk);
     }
