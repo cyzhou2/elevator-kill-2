@@ -14,7 +14,7 @@ var UI = (function () {
     game = g;
     ["clock", "floorNo", "aliveNo", "hint", "objPanel", "objCount", "objLives", "objFloors", "objTask",
       "repairBar", "rbFill", "rbLabel", "carPanel", "carPanelTitle", "carFloors",
-      "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown", "carPad", "carActs",
+      "muteBtn", "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown", "carPad", "carActs",
       "overlay", "overlayCard",
       "pause", "pauseResume", "pauseRestart", "joy", "knob", "staminaBar", "flashMsg"].forEach(function (k) {
       el[k] = $(k);
@@ -35,6 +35,11 @@ var UI = (function () {
       });
     });
     if (el.cpUp) el.cpUp.onclick = function () { game.callUp && game.callUp(); };
+    if (el.muteBtn) el.muteBtn.onclick = function () {
+      Audio2.setMute(!Audio2.muted);
+      el.muteBtn.classList.toggle("off", !!Audio2.muted);
+      toast(Audio2.muted ? "已静音" : "声音已开");
+    };
     if (el.stUp) el.stUp.onclick = function () { game.stairUp && game.stairUp(); };
     if (el.stDown) el.stDown.onclick = function () { game.stairDown && game.stairDown(); };
     if (el.cpDown) el.cpDown.onclick = function () { game.callDown && game.callDown(); };
@@ -200,7 +205,7 @@ var UI = (function () {
       });
       el.objFloors.innerHTML = html;
       if (W.allFusesDone && W.allFusesDone()) {
-        el.objTask.textContent = p && p.floor === 1 ? "去大厅按紧急按钮出门" : "回 1F 大厅，按紧急按钮";
+        el.objTask.textContent = p && (p.floor === 1 || p.floor === CFG.FLOORS) ? "按 ⛔ 图标 / E —— 从这里出去" : "去 1F 大厅 或 顶层消防通道，两处都能走";
         el.objTask.className = "objTask ready";
       } else {
         el.objTask.textContent = "修好 " + total + " 处配电箱（点 ⚡ 图标，或按 E / 用）";
@@ -226,8 +231,8 @@ var UI = (function () {
     var p = W.player;
     if (!p.alive) return "";
     if (p.space === "stair") return "楼梯上…";
-    if (p.space === "car") return "左下方向键走动 · 右侧选层 · 门开到门口就出去";
-    if (W.allFusesDone && W.allFusesDone() && W.nearExit && W.nearExit()) return "点 <b>⛔ 图标</b> 或按 <b>E</b> —— 按下紧急按钮离开";
+    if (p.space === "car") return "点轿厢走 · 右侧选层 · 门开到门口就出去";
+    if (W.allFusesDone && W.allFusesDone() && W.nearExit && W.nearExit()) return "点 <b>⛔ 图标</b> 或按 <b>E</b> —— 从这里出去";
     if (W.repair) return "修理中… 离开就中断（进度会保留）";
     if (W.nearDoor && W.nearDoor()) {
       var dd2 = W.stairDoors[p.floor][W.nearDoor()];

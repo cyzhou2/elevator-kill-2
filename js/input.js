@@ -22,7 +22,7 @@ var Input = (function () {
 
   function init(game) {
     els.stage = document.getElementById("stage");
-    els.joy = document.getElementById("joy");
+    els.joy = null;   /* 摇杆已移除：全程点击/滑动移动 */
     els.knob = document.getElementById("knob");
 
     /* 键盘 */

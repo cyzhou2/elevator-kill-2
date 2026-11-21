@@ -150,6 +150,28 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
+## 0.7 双出口 / 更强的 AI / 纯点击（v2.7）
+
+### 双出口
+
+- `world.exitSpots()` 返回两个：`{id:'1', floor:1}` 和 `{id:'top', floor:FLOORS}`，位置都在各自大厅。
+- `nearExitSpot()` / `prompts()` / `promptAction('exit', id)` / `playerUse()` 全部走这套；`nearExit()` 只是它的布尔封装。
+- 想加第三个出口：往 `exitSpots()` 里 push 一条即可（HUD 与绘制会自动带上）。
+
+### AI 目标意识
+
+```js
+KILLER.guardBias: 0.55   // 选巡逻层时，直接奔向"还有配电箱/出口"的层的概率
+```
+
+- 实现在 `ai.js` 的 `nextSweepFloor()`：先看 `hotFloors()`（没修完=配电箱层，修完=两个出口层），掷骰子命中就直接返回该层。
+- 想更凶：`guardBias` 0.8、`patrol` 2.0；想松一点降到 0.3。
+
+### 移动与静音
+
+- 摇杆已从 `index.html` / `styles.css` 移除，`input.js` 里 `els.joy = null`（代码留着但永不激活）。移动 = 点击地面（`setWalk` + Nav A*）。
+- `#muteBtn` 绑定 `Audio2.setMute`，状态用 `.off` 类表现；和键盘 `M` 等价。
+
 ## 0.75 电梯出梯 = 走出去（v2.6）
 
 `world.js` 的 `moveActor` 里，轿厢分支多了一段：

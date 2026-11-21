@@ -1022,10 +1022,12 @@ var Render = (function () {
       }
     }
 
-    /* 1F 大厅的紧急按钮（全部修好后亮起） */
-    if (world.viewFloor === 1) {
+    /* 两个出口（全部修好后亮起） */
+    var spots0 = world.exitSpots ? world.exitSpots() : [];
+    for (var si = 0; si < spots0.length; si++) (function (sp) {
+      if (world.viewFloor !== sp.floor) return;
       var g = World.geom;
-      var ex = g.hallCX - 1.6, ey = g.hallY0 + 0.55;
+      var ex = sp.x, ey = sp.y;
       var ready = !!(world.allFusesDone && world.allFusesDone());
       /* 面板 */
       ctx.fillStyle = "#2b2320";
@@ -1047,7 +1049,7 @@ var Render = (function () {
       ctx.beginPath();
       ctx.arc(ex, ey - 0.12, 0.1, 0, 6.283);
       ctx.fill();
-    }
+    })(spots0[si]);
   }
 
   /* ---------- 交互图标：走近可交互物，飘出一个圆形按钮 ---------- */

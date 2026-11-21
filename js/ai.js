@@ -333,9 +333,32 @@ var AI = (function () {
     return best;
   }
 
+  /** 有"该盯的楼层"吗：没修完 → 配电箱层；修完 → 两个出口层 */
+  function hotFloors(w) {
+    var out = [];
+    var fs2 = w.fuses || [];
+    var done = 0;
+    for (var i = 0; i < fs2.length; i++) {
+      if (fs2[i].done) done++;
+      else out.push(fs2[i].floor);
+    }
+    if (done >= fs2.length && fs2.length) {
+      out.push(1);
+      out.push(w.cfg.FLOORS);
+    }
+    return out;
+  }
+
   function nextSweepFloor(w, a) {
     var C = w.cfg, span = C.KILLER.sweepSpan, cool = C.KILLER.checkedCool;
     var base = a.floor;
+
+    /* 一定概率直接奔向"有事"的楼层 —— 免得一整局都撞不见人 */
+    var hot = hotFloors(w);
+    if (hot.length && Math.random() < (C.KILLER.guardBias || 0.55)) {
+      var pick = hot[Math.floor(Math.random() * hot.length)];
+      if (pick !== a.floor) return pick;
+    }
     for (var t = 0; t < 4; t++) {
       var nf = base + a.patrolDir * span;
       if (nf > C.FLOORS) { a.patrolDir = -1; nf = base - span; }

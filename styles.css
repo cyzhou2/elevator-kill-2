@@ -107,17 +107,8 @@ html, body {
 .touchonly { display: none; }
 body.touch .touchonly { display: block; }
 
-#joy {
-  position: absolute; left: 22px; bottom: 24px;
-  width: 108px; height: 108px; border-radius: 50%;
-  border: 1px solid #2b3331; background: rgba(10, 13, 13, .45);
-  touch-action: none;
-}
-#joy i {
-  position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; margin: -21px 0 0 -21px;
-  border-radius: 50%; background: rgba(120, 133, 128, .28); border: 1px solid #3b4542;
-  transition: transform .06s linear;
-}
+
+
 #btns {
   position: absolute; right: 20px; bottom: 22px;
   display: grid; grid-template-columns: repeat(2, 58px); gap: 8px;
@@ -200,8 +191,8 @@ body.inCar #btns { display: none; }
   }
 
   /* 摇杆 / 按键全部落进底部控制条 */
-  #joy { left: 16px; bottom: 16px; width: 96px; height: 96px; }
-  #joy i { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
+  
+  
   #btns {
     right: 14px; bottom: 12px;
     grid-template-columns: repeat(2, 54px); gap: 7px;
@@ -319,7 +310,7 @@ body.inCar #btns { display: none; }
   position: absolute; left: 34px; bottom: 40px;
   width: 132px; height: 132px; z-index: 9;
 }
-body.inCar #joy { display: none; }
+
 #carPad .cpad {
   position: absolute; width: 42px; height: 42px; border-radius: 8px;
   font: inherit; font-size: 15px; line-height: 1; color: #a9b5b1;
@@ -361,8 +352,8 @@ body.inCar #joy { display: none; }
   :root { --ctl: 104px; }
   #stage { top: 0; left: 0; right: 0; width: 100%; height: calc(100vh - var(--ctl)); }
   #hint { bottom: auto; top: 54px; left: 50%; transform: translateX(-50%); font-size: 11px; }
-  #joy { left: 12px; bottom: 8px; width: 88px; height: 88px; }
-  #joy i { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
+  
+  
   #btns { right: 12px; bottom: 6px; grid-template-columns: repeat(2, 50px); gap: 6px; }
   #btns .tb { height: 42px; font-size: 12px; }
   body #callPanel, body #stairPanel { bottom: calc(var(--ctl) + 8px); }
@@ -468,3 +459,17 @@ body.inCar #joy { display: none; }
 }
 #clock.hot .threat { color: #d0655a; }
 #clock.hot { text-shadow: 0 0 12px rgba(180, 60, 50, .35); }
+
+
+/* ---------- 静音按钮 ---------- */
+#muteBtn {
+  position: absolute; right: 16px; top: 14px; z-index: 12;
+  width: 38px; height: 38px; border-radius: 50%;
+  font: inherit; font-size: 15px; color: #9aa7a2;
+  background: rgba(12, 16, 15, .78); border: 1px solid #2b3331;
+}
+#muteBtn:hover { color: #e2eae6; border-color: #45504d; }
+#muteBtn.off { color: #6b4a44; border-color: #4a2e2a; text-decoration: line-through; }
+@media (max-width: 820px), (orientation: portrait) {
+  body #muteBtn { width: 34px; height: 34px; right: 10px; top: 10px; font-size: 14px; }
+}

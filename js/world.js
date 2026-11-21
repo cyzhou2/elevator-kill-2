@@ -290,12 +290,27 @@ var World = (function () {
   }
 
   /** 1F 大厅的紧急逃生按钮 */
-  function nearExit() {
-    var p = W.player;
-    if (!p || !p.alive || p.space !== "floor" || p.floor !== 1) return false;
-    var ex = G.hallCX - 1.6, ey = G.hallY0 + 0.55;
-    return dist(p.x, p.y, ex, ey) < 1.1;
+  /** 两个出口：1F 大厅的紧急按钮、顶层（20F）的消防通道门 */
+  function exitSpots() {
+    return [
+      { id: "1", floor: 1, x: G.hallCX - 1.6, y: G.hallY0 + 0.55, label: "1F 大厅 · 紧急按钮" },
+      { id: "top", floor: Cfg.FLOORS, x: G.hallCX + 1.6, y: G.hallY0 + 0.55, label: "顶层 · 消防通道" }
+    ];
   }
+
+  /** 玩家附近能用的出口（没有就 null） */
+  function nearExitSpot() {
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor") return null;
+    var list = exitSpots();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].floor !== p.floor) continue;
+      if (dist(p.x, p.y, list[i].x, list[i].y) < 1.15) return list[i];
+    }
+    return null;
+  }
+
+  function nearExit() { return !!nearExitSpot(); }
 
   /** 随机惊吓事件：kind 省略则按权重随机（也方便测试/调试强制触发） */
   function triggerScare(kind) {
@@ -344,13 +359,17 @@ var World = (function () {
       });
     }
 
-    /* 1F 紧急按钮 */
+    /* 两个出口（修完之后才亮） */
     if (allFusesDone()) {
-      var ex = G.hallCX - 1.6, ey = G.hallY0 + 0.55;
-      if (p.floor === 1 && dist(p.x, p.y, ex, ey) < 2.2) {
+      var spots = exitSpots();
+      for (var ei = 0; ei < spots.length; ei++) {
+        var sp = spots[ei];
+        if (p.floor !== sp.floor) continue;
+        var ed = dist(p.x, p.y, sp.x, sp.y);
+        if (ed > 2.4) continue;
         out.push({
-          kind: "exit", id: "exit", icon: "exit", label: "紧急出门",
-          x: ex, y: ey - 0.6, near: dist(p.x, p.y, ex, ey) < 1.15, progress: 0, active: false
+          kind: "exit", id: sp.id, icon: "exit", label: sp.label,
+          x: sp.x, y: sp.y - 0.6, near: ed < 1.15, progress: 0, active: false
         });
       }
     }
@@ -393,8 +412,11 @@ var World = (function () {
       return true;
     }
     if (kind === "exit") {
-      if (!allFusesDone() || !nearExit()) return false;
+      if (!allFusesDone()) return false;
+      var sp2 = nearExitSpot();
+      if (!sp2) return false;
       W.escaped = true;
+      W.exitAt = sp2.id;
       endRound("escape");
       return true;
     }
@@ -437,7 +459,7 @@ var World = (function () {
       addEvent("你修好了 " + f.floor + "F 的配电箱（" + fusesDone() + "/" + W.fuses.length + "）", "obj", f.floor);
       emitNoise(f.floor, f.x, f.y, 8, "power");
       if (allFusesDone()) {
-        addEvent("全部恢复供电 —— 回 1F 大厅按紧急按钮离开", "obj", null);
+        addEvent("全部恢复供电 —— 去 1F 大厅 或 顶层消防通道 离开（两处都行）", "obj", null);
         if (window.Audio2) Audio2.ding(0.9);
       }
     }
@@ -447,7 +469,7 @@ var World = (function () {
   function playerUse() {
     var p = W.player;
     if (!p || !p.alive || p.space !== "floor") return false;
-    if (allFusesDone() && nearExit()) {
+    if (allFusesDone() && nearExitSpot()) {
       W.escaped = true;
       endRound("escape");
       return true;
@@ -1377,7 +1399,7 @@ var World = (function () {
     get repair() { return W.repair; },
     get power() { return W.power; },
     nearFuse: nearFuse,
-    nearExit: nearExit,
+    nearExit: nearExit, exitSpots: exitSpots, nearExitSpot: nearExitSpot,
     playerUse: playerUse, boardOpenCar: boardOpenCar,
     prompts: prompts, promptAction: promptAction, breakDoor: breakDoor,
     panelVisible: panelVisible, canCall: canCall,
