@@ -21,6 +21,7 @@ var World = (function () {
     floor: 1,           // 玩家所在层
     viewFloor: 1,       // 正在渲染的楼层
     elevators: [],      // 2 部
+    pallets: [],         // 板子：pallets[floor] = [{open,amt,broken,breaking}]
     fuses: [],           // 配电箱 [{floor,x,y,done,prog}]
     power: [],           // power[floor] = 该层已通电
     lives: 2,            // 玩家剩余次数
@@ -70,6 +71,10 @@ var World = (function () {
       W.stairDoors[f] = {
         A: makeDoor("A", f), B: makeDoor("B", f)
       };
+      W.pallets[f] = [];
+      for (var pi0 = 0; pi0 < G.pallets.length; pi0++) {
+        W.pallets[f].push({ open: true, amt: 1, broken: false, breaking: 0, breakingBy: null });
+      }
     }
 
     W.elevators = [
@@ -192,6 +197,13 @@ var World = (function () {
     var dA = W.stairDoors[floor].A, dB = W.stairDoors[floor].B;
     if (!dA.broken && !dA.open && dA.amt < 0.55) list.push(G.stairDoorA.rect);
     if (!dB.broken && !dB.open && dB.amt < 0.55) list.push(G.stairDoorB.rect);
+    /* 关着的板子（横跨走廊，谁也别想过） */
+    if (W.pallets[floor]) {
+      for (var pp = 0; pp < W.pallets[floor].length; pp++) {
+        var pst = W.pallets[floor][pp];
+        if (!pst.broken && !pst.open && pst.amt < 0.55) list.push(G.pallets[pp]);
+      }
+    }
     /* 关着的电梯门 */
     for (var i = 0; i < W.elevators.length; i++) {
       var e = W.elevators[i];
@@ -325,6 +337,54 @@ var World = (function () {
     return k;
   }
 
+  /** 离玩家最近的板子（返回 {i, st, rect}） */
+  function nearPallet() {
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor") return null;
+    var list = W.pallets[p.floor];
+    if (!list) return null;
+    for (var i = 0; i < list.length; i++) {
+      var rc = G.pallets[i];
+      var cx = rc.x + rc.w / 2, cy = rc.y + rc.h / 2;
+      if (dist(p.x, p.y, cx, cy) < 1.5) return { i: i, st: list[i], rect: rc };
+    }
+    return null;
+  }
+
+  function togglePallet(i) {
+    var p = W.player;
+    if (!p || p.space !== "floor") return false;
+    var st = W.pallets[p.floor] && W.pallets[p.floor][i];
+    if (!st || st.broken) return false;
+    st.open = !st.open;
+    st.breaking = 0;
+    st.breakingBy = null;
+    var rc = G.pallets[i];
+    emitNoise(p.floor, rc.x + rc.w / 2, rc.y + rc.h / 2, Cfg.DOOR.noise, st.open ? "door" : "slam");
+    if (window.Audio2) Audio2.door(st.open);
+    return true;
+  }
+
+  /** 它砸板子 */
+  function breakPallet(killer, floor, i, dt) {
+    var st = W.pallets[floor] && W.pallets[floor][i];
+    if (!st || st.open || st.broken) { if (st) { st.breaking = 0; st.breakingBy = null; } return false; }
+    st.breakingBy = killer ? killer.id : "x";
+    st.breaking += dt / (Cfg.DOOR.breakSec || 2.4);
+    if (st.breaking >= 1) {
+      st.broken = true;
+      st.breaking = 0;
+      st.breakingBy = null;
+      st.open = true;
+      st.amt = 1;
+      var rc = G.pallets[i];
+      emitNoise(floor, rc.x + rc.w / 2, rc.y + rc.h / 2, (Cfg.DOOR.breakNoise || 10) + 4, "break");
+      if (window.Audio2) Audio2.door(false);
+      addEvent("走廊的板子被它砸断了（" + floor + "F）", "sys", floor);
+    }
+    return st.broken;
+  }
+
   /** 当前所有可交互对象（供画面上飘出图标） */
   function prompts() {
     var out = [];
@@ -353,6 +413,17 @@ var World = (function () {
           x: ex, y: ey - 0.6, near: dist(p.x, p.y, ex, ey) < 1.15, progress: 0, active: false
         });
       }
+    }
+
+    /* 走廊板子 */
+    var np = nearPallet();
+    if (np && !np.st.broken) {
+      out.push({
+        kind: "pallet", id: String(np.i), icon: "pallet",
+        label: np.st.open ? "拉下板子（挡住走廊）" : "抬起板子",
+        x: np.rect.x + np.rect.w / 2, y: np.rect.y - 0.35, near: true,
+        progress: 0, breaking: np.st.breaking || 0
+      });
     }
 
     /* 楼梯间门（板子） */
@@ -397,6 +468,9 @@ var World = (function () {
       W.escaped = true;
       endRound("escape");
       return true;
+    }
+    if (kind === "pallet") {
+      return togglePallet(parseInt(String(id), 10) || 0);
     }
     if (kind === "door") {
       var L2 = id === "B" ? "B" : "A";
@@ -911,6 +985,7 @@ var World = (function () {
     W.time += dt;
     if (W.player) {
       if (W.player.hurtT > 0) W.player.hurtT = Math.max(0, W.player.hurtT - dt);
+      if (W.player.hasteT > 0) W.player.hasteT = Math.max(0, W.player.hasteT - dt);
       if (W.player.invuln > 0) W.player.invuln = Math.max(0, W.player.invuln - dt);
     }
     updateRepair(dt);
@@ -946,6 +1021,19 @@ var World = (function () {
       }
     }
 
+    /* 板子的开合动画 */
+    for (var pf2 = 1; pf2 <= Cfg.FLOORS; pf2++) {
+      var plist = W.pallets[pf2];
+      if (!plist) continue;
+      for (var pj = 0; pj < plist.length; pj++) {
+        var pd = plist[pj];
+        if (pd.broken) { pd.amt = 1; pd.breaking = 0; continue; }
+        if (pd.open) pd.amt = Math.min(1, pd.amt + dt / Cfg.DOOR.openSec);
+        else pd.amt = Math.max(0, pd.amt - dt / Cfg.DOOR.closeSec);
+        if (!pd.breakingBy) pd.breaking = Math.max(0, pd.breaking - dt * 0.6);
+      }
+    }
+
     /* 电梯 */
     for (var e2 = 0; e2 < W.elevators.length; e2++) updateElevator(W.elevators[e2], dt);
 
@@ -964,11 +1052,18 @@ var World = (function () {
       else AI.killerUpdate(API, ac, dt);
     }
 
+    /* 擦刀计时 */
+    for (var rc = 0; rc < W.actors.length; rc++) {
+      var ra = W.actors[rc];
+      if (ra.kind === "killer" && ra.recoverT > 0) ra.recoverT = Math.max(0, ra.recoverT - dt);
+    }
+
     /* 抓到判定 */
     for (var k = 0; k < W.actors.length; k++) {
       var ki = W.actors[k];
       if (ki.kind !== "killer" || !ki.alive) continue;
       ki.catching = null;
+      if (ki.recoverT > 0) continue;         /* 擦刀中：抓不到人 */
       for (var q = 0; q < W.actors.length; q++) {
         var kd = W.actors[q];
         if (kd.kind !== "kid" || !kd.alive) continue;
@@ -976,6 +1071,7 @@ var World = (function () {
         if (kd.floor !== ki.floor) continue;
         if (kd.space !== ki.space) continue;
         if (kd.space === "car" && kd.carId !== ki.carId) continue;
+        if (kd.invuln > 0) continue;              /* 受伤后的无敌帧 */
         if (dist(kd.x, kd.y, ki.x, ki.y) <= Cfg.KILLER.catchRange) {
           ki.catching = kd;
         }
@@ -1059,6 +1155,18 @@ var World = (function () {
       W.lives--;
       kid.hurtT = (Cfg.PLAYER && Cfg.PLAYER.hurtSec) || 12;
       kid.invuln = (Cfg.PLAYER && Cfg.PLAYER.invulnSec) || 3;
+      kid.hasteT = (Cfg.PLAYER && Cfg.PLAYER.hasteSec) || 3.2;
+      /* 擦刀：它得手后要收刀 1.7 秒，这段时间它动不了 —— 你正好跑 */
+      killer.recoverT = (Cfg.KILLER && Cfg.KILLER.attackRecover) || 1.7;
+      /* 被打退半步，别和它贴在一起 */
+      var kx = kid.x - killer.x, ky = kid.y - killer.y;
+      var kl = Math.hypot(kx, ky) || 1;
+      for (var kb = 1; kb <= 8; kb++) {
+        var bx = kid.x + (kx / kl) * kb * 0.12;
+        var by = kid.y + (ky / kl) * kb * 0.12;
+        if (canStand(kid.floor, bx, by, Cfg.KID.radius)) { kid.x = bx; kid.y = by; }
+        else break;
+      }
       kid.grip = 0;
       W.shake = 1;
       W.flash = 0.8;
@@ -1074,6 +1182,7 @@ var World = (function () {
       killer.chaseKid = null;
       killer.path = null;
       killer.chaseCool = W.time + 4;
+      killer.breakingAt = null;
       if (window.Audio2) Audio2.hurt();
       return;
     }
@@ -1131,6 +1240,7 @@ var World = (function () {
     var sp = canSprint ? Cfg.KID.sprint : Cfg.KID.speed;
     /* 受伤时慢一点 */
     var hurtMoveMul = (p.hurtT > 0 && Cfg.PLAYER) ? Cfg.PLAYER.hurtSpeed : 1;
+    if (p.hasteT > 0 && Cfg.PLAYER) hurtMoveMul = Cfg.PLAYER.hasteMul;   /* 受击加速盖过受伤减速 */
     sp *= hurtMoveMul;
     if (canSprint) p.stamina = Math.max(0, p.stamina - Cfg.KID.staminaDrain * dt);
     else p.stamina = Math.min(Cfg.KID.stamina, p.stamina + Cfg.KID.staminaRegen * dt);
@@ -1343,6 +1453,8 @@ var World = (function () {
     nearExit: nearExit,
     playerUse: playerUse, boardOpenCar: boardOpenCar,
     prompts: prompts, promptAction: promptAction, breakDoor: breakDoor,
+    breakPallet: breakPallet, nearPallet: nearPallet, togglePallet: togglePallet,
+    get pallets() { return W.pallets; },
     panelVisible: panelVisible, canCall: canCall,
     get events() { return W.events; },
     get noises() { return W.noises; },

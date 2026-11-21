@@ -407,7 +407,8 @@ var Render = (function () {
     var powered = !!(World.power && World.power[world.viewFloor]);
     var flick = World.flicker || 0;
     var dark = view.inCar ? 0.82 : (powered ? 0.7 : 0.865);
-    dark = Math.min(0.97, dark + flick * 0.22);
+    var lightOff = !(p && p.lightOn);
+    dark = Math.min(0.975, dark + flick * 0.22 + (lightOff ? 0.05 : 0));
     c.globalCompositeOperation = "source-over";
     c.fillStyle = "rgba(2,3,3," + dark + ")";
     c.fillRect(g.minX, g.minY, g.width, g.height);
@@ -432,8 +433,8 @@ var Render = (function () {
     if (p && p.alive && p.space !== "stair") {
       var px = p.x, py = p.y;
       var f = 0.94 + Math.sin(t * 9.1) * 0.02 + Math.sin(t * 27.7) * 0.012;
-      /* 贴身微光 */
-      var amb = CFG.KID.ambient * f * (view.inCar ? 2.1 : 1.25);
+      /* 贴身微光：关灯时只剩一小圈，开灯时更小（靠光锥照） */
+      var amb = (p.lightOn ? 1.35 : 2.05) * f * (view.inCar ? 1.7 : 1);
       var ga = c.createRadialGradient(px, py, 0.05, px, py, amb);
       ga.addColorStop(0, "rgba(0,0,0,0.92)");
       ga.addColorStop(0.5, "rgba(0,0,0,0.5)");
@@ -533,6 +534,7 @@ var Render = (function () {
     drawObjectives(world);
 
     /* 5. 角色（只画看得见的） */
+    drawPallets(world);
     drawActors(world);
     drawPrompts(world);
 
@@ -1046,6 +1048,60 @@ var Render = (function () {
   }
 
   /* ---------- 交互图标：走近可交互物，飘出一个圆形按钮 ---------- */
+  /* ---------- 走廊板子 ---------- */
+  function drawPallets(world) {
+    var g = world.geom;
+    var list = world.pallets && world.pallets[world.viewFloor];
+    if (!list || !g.pallets) return;
+    for (var i = 0; i < g.pallets.length; i++) {
+      var rc = g.pallets[i];
+      var st = list[i];
+      if (!st) continue;
+      if (st.broken) {
+        /* 断掉的两截 */
+        ctx.fillStyle = "#2b2f2d";
+        ctx.fillRect(rc.x - 0.05, rc.y + 0.1, rc.w + 0.1, 0.42);
+        ctx.fillRect(rc.x - 0.05, rc.y + rc.h - 0.5, rc.w + 0.1, 0.4);
+        ctx.strokeStyle = "#3b4340";
+        ctx.lineWidth = 0.02;
+        ctx.strokeRect(rc.x - 0.05, rc.y + 0.1, rc.w + 0.1, 0.42);
+        ctx.strokeRect(rc.x - 0.05, rc.y + rc.h - 0.5, rc.w + 0.1, 0.4);
+        continue;
+      }
+      var amt = st.amt;              /* 1 = 抬起放开，0 = 拉下挡住 */
+      if (amt > 0.55) {
+        /* 抬着：立在走廊边上，细细一条 */
+        ctx.fillStyle = "#2f3330";
+        ctx.fillRect(rc.x + rc.w * 0.35, rc.y + 0.25, rc.w * 0.3, rc.h - 0.5);
+        ctx.strokeStyle = "#434a46";
+        ctx.lineWidth = 0.02;
+        ctx.strokeRect(rc.x + rc.w * 0.35, rc.y + 0.25, rc.w * 0.3, rc.h - 0.5);
+      } else {
+        /* 拉下：横跨走廊，带木条纹理 */
+        ctx.fillStyle = "#3a3a32";
+        ctx.fillRect(rc.x - 0.03, rc.y, rc.w + 0.06, rc.h);
+        ctx.strokeStyle = "#57544a";
+        ctx.lineWidth = 0.022;
+        ctx.strokeRect(rc.x - 0.03, rc.y, rc.w + 0.06, rc.h);
+        ctx.strokeStyle = "rgba(20,22,20,0.55)";
+        ctx.lineWidth = 0.016;
+        for (var k = 1; k < 4; k++) {
+          ctx.beginPath();
+          ctx.moveTo(rc.x - 0.03, rc.y + (rc.h / 4) * k);
+          ctx.lineTo(rc.x + rc.w + 0.03, rc.y + (rc.h / 4) * k);
+          ctx.stroke();
+        }
+        /* 正在被砸：红色读条 */
+        if (st.breaking > 0.01) {
+          ctx.fillStyle = "rgba(0,0,0,0.55)";
+          ctx.fillRect(rc.x - 0.02, rc.y - 0.16, rc.w + 0.04, 0.07);
+          ctx.fillStyle = "rgba(190,60,50,0.92)";
+          ctx.fillRect(rc.x - 0.02, rc.y - 0.16, (rc.w + 0.04) * Math.min(1, st.breaking), 0.07);
+        }
+      }
+    }
+  }
+
   function drawPrompts(world) {
     var list = world.prompts ? world.prompts() : [];
     if (!list.length) return;
@@ -1109,6 +1165,12 @@ var Render = (function () {
         ctx.lineTo(cxx + 9, cyy);
         ctx.lineTo(cxx + 6, cyy + 3);
         ctx.stroke();
+      } else if (pr.icon === "pallet") {
+        /* 板子：横条 + 两道竖纹 */
+        ctx.fillRect(cxx - 9, cyy - 3, 18, 6);
+        ctx.fillStyle = "rgba(10,13,13,0.9)";
+        ctx.fillRect(cxx - 3, cyy - 3, 2, 6);
+        ctx.fillRect(cxx + 2, cyy - 3, 2, 6);
       } else {
         /* 门 */
         ctx.strokeRect(cxx - 5, cyy - 8, 10, 16);
@@ -1150,6 +1212,7 @@ var Render = (function () {
   }
 
   function drawActors(world) {
+    var _recover = 0;
     var list = world.actors;
     for (var i = 0; i < list.length; i++) {
       var a = list[i];

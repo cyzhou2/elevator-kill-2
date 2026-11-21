@@ -150,7 +150,36 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
-## 0.85 交互图标与板子门（v2.3）
+## 0.8 板子 / 伤害 / 感知（v2.5）
+
+### 板子（`geom.pallets` + `world.pallets[floor][i]`）
+
+- 位置在 `geom.js`：`rect(6.2, 0, 0.34, corridor.h)` 和 `rect(11.6, ...)`，横跨走廊。
+- 状态 `{open, amt, broken, breaking, breakingBy}`，默认 `open: true`。
+- 挡路：`wallsAt()` 里 `!broken && !open && amt < 0.55` 时把矩形塞进墙列表。
+- 交互：`nearPallet()` / `togglePallet(i)` / `breakPallet(killer, floor, i, dt)`；
+- AI：`blockedDoor()` 先查板子再查楼梯门，`smash()` 统一处理破门/破板。
+- 想加更多板子：往 `geom.js` 的 `pallets` 数组里加矩形即可（`world` 会按层自动建状态）。
+
+### 伤害（`catchKid`）
+
+```js
+KILLER.attackRecover: 1.7   // 擦刀
+KILLER.catchRange: 0.62
+PLAYER.lives: 2             // 2 = 一刀倒(受伤)，再一刀死
+PLAYER.hasteSec: 3.2, hasteMul: 1.42
+PLAYER.invulnSec: 3.0       // 无敌帧（catch 循环里跳过 invuln>0 的人）
+```
+
+顺序：抓中 → `lives--`、`recoverT=1.7`、`invuln=3`、`haste=3.2`、`hurt=12`、击退 → 这 3 秒内任何人都抓不到你。
+
+### 感知（`ai.js` 的 `detectKid`）
+
+- **每帧**跑（不是决策节拍），先锥形视野，再兜底 2.6 米 360° 感知（需 0.45 秒确认）。
+- 优先级高于 `travel`——所以它不会一边赶路一边无视贴脸的玩家。
+- 想更凶：`KILLER.senseRadius` 调到 3.5、`senseDelay` 降到 0.2；`sightCone` 调到 1.6（≈92°）。
+
+## 0.85 交互图标与板子门（v2.3）（v2.3）
 
 ### 图标（`world.prompts()` → `render.drawPrompts()` → 点击 → `world.promptAction()`）
 

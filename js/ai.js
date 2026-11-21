@@ -129,8 +129,55 @@ var AI = (function () {
 
   /* ================= 杀人犯 ================= */
 
+  /**
+   * 每帧感知：先看视野锥，再兜底"贴身 360°"。
+   * 返回 {kid, kind:'sight'|'sense'} 或 null。
+   */
+  function detectKid(w, a) {
+    var C = w.cfg;
+    var best = null, bd = 1e9;
+    var near = null, nd = 1e9;
+    for (var i = 0; i < w.state.actors.length; i++) {
+      var kid = w.state.actors[i];
+      if (kid.kind !== "kid" || !kid.alive) continue;
+      if (kid.space !== "floor" || kid.floor !== a.floor) continue;
+      var d = dist(a.x, a.y, kid.x, kid.y);
+      if (d > C.KILLER.sight) continue;
+      if (!w.los(a.floor, a.x, a.y, kid.x, kid.y)) continue;
+
+      /* 视野锥 */
+      var ang = Math.atan2(kid.y - a.y, kid.x - a.x);
+      var half = kid.lightOn ? C.KILLER.sightCone * 1.5 : C.KILLER.sightCone;
+      if (Math.abs(Geom.angDiff(ang, a.face)) <= half) {
+        if (d < bd) { bd = d; best = kid; }
+        continue;
+      }
+      /* 贴脸：朝哪边都能察觉到（要等 senseDelay 确认） */
+      if (d <= (C.KILLER.senseRadius || 2.6) && d < nd) { nd = d; near = kid; }
+    }
+    if (best) return { kid: best, kind: "sight" };
+    if (near) return { kid: near, kind: "sense" };
+    return null;
+  }
+
+  function startChase(w, a, kid, now) {
+    if (a.state !== "chase" && window.Audio2 && window.Audio2.stinger) Audio2.stinger();
+    a.state = "chase";
+    a.chaseKid = kid.id;
+    a.target = { x: kid.x, y: kid.y, floor: kid.floor };
+    a.channel = { x: kid.x, y: kid.y, floor: kid.floor, t: now };
+  }
+
   function killerUpdate(w, a, dt) {
     var C = w.cfg, G = w.geom, now = w.state.time;
+
+    /* 擦刀：得手后收刀 1.7 秒，原地不动 */
+    if (a.recoverT > 0) {
+      a.state = "recover";
+      a.path = null;
+      a.breakingAt = null;
+      return;
+    }
     if (a.space === "floor" && !a.travel && w.nearStairs && w.nearStairs()) {
       /* 站在楼梯口却没打算换层：说明目标就在本层，走出去 */
       a.path = null;
@@ -139,10 +186,9 @@ var AI = (function () {
     /* 门被拉上了：不管它在追人还是换层，挡在路上就砸（已经开始砸的继续砸完） */
     if (a.space === "floor") {
       var bd0 = blockedDoor(w, a);
-      if (bd0 && (a.state === "chase" || a.travel || a.heard || a.breakingAt === bd0.L)) {
-        a.breakingAt = bd0.L;
-        a.face = Math.atan2(bd0.y - a.y, bd0.x - a.x);
-        w.breakDoor(a, a.floor, bd0.L, dt);
+      var tag0 = bd0 ? (bd0.pallet != null ? "P" + bd0.pallet : bd0.L) : null;
+      if (bd0 && (a.state === "chase" || a.travel || a.heard || a.breakingAt === tag0)) {
+        smash(w, a, bd0, dt);
         return;
       }
       if (!bd0) a.breakingAt = null;
@@ -163,6 +209,23 @@ var AI = (function () {
       return;
     }
     if (a.space !== "floor") return;
+
+    /* 每帧感知：有人在旁边/视线里，优先于一切（包括"要去别的楼层"） */
+    var det = detectKid(w, a);
+    if (det) {
+      if (det.kind === "sense") {
+        if (a.senseId !== det.kid.id) { a.senseId = det.kid.id; a.senseAt = now; }
+        if (now - (a.senseAt || 0) >= (C.KILLER.senseDelay || 0.45)) det.kind = "sight";
+      }
+      if (det.kind === "sight") {
+        a.senseId = null;
+        startChase(w, a, det.kid, now);
+        stepKiller(w, a, dt);
+        return;
+      }
+    } else {
+      a.senseId = null;
+    }
 
     /* 修理声（结构噪音）优先级高于"本来要去的那层"，但低于正在追人 */
     if (a.state !== "chase" && a.heard && a.heard.kind === "muffled" &&
@@ -348,6 +411,20 @@ var AI = (function () {
   /** 门挡在前面吗？返回挡路的门 {L,x,y} 或 null */
   function blockedDoor(w, a) {
     var G = w.geom;
+    /* 走廊板子 */
+    var plist = w.state.pallets && w.state.pallets[a.floor];
+    if (plist && G.pallets) {
+      for (var pi = 0; pi < plist.length; pi++) {
+        var pst = plist[pi];
+        if (!pst || pst.open || pst.broken) continue;
+        var pr = G.pallets[pi];
+        var pcx = pr.x + pr.w / 2, pcy = pr.y + pr.h / 2;
+        if (Math.abs(a.x - pcx) > 1.15) continue;
+        if (a.y < pr.y - 0.3 || a.y > pr.y + pr.h + 0.3) continue;
+        return { pallet: pi, x: pcx, y: a.y };
+      }
+    }
+    /* 楼梯间门 */
     for (var i = 0; i < 2; i++) {
       var L = i === 0 ? "A" : "B";
       var st = w.state.stairDoors[a.floor][L];
@@ -360,18 +437,26 @@ var AI = (function () {
     return null;
   }
 
+  /** 砸挡路的东西（门或板子） */
+  function smash(w, a, bd, dt) {
+    if (bd.pallet != null) {
+      a.breakingAt = "P" + bd.pallet;
+      a.face = Math.atan2(0, bd.x - a.x);
+      w.breakPallet(a, a.floor, bd.pallet, dt);
+    } else {
+      a.breakingAt = bd.L;
+      a.face = Math.atan2(bd.y - a.y, bd.x - a.x);
+      w.breakDoor(a, a.floor, bd.L, dt);
+    }
+  }
+
   function stepKiller(w, a, dt) {
     var C = w.cfg;
     if (a.space !== "floor") return;
 
     /* 门被拉上了：先砸门（追击里最紧张的一段） */
     var bd = blockedDoor(w, a);
-    if (bd) {
-      a.breakingAt = bd.L;
-      a.face = Math.atan2(bd.y - a.y, bd.x - a.x);
-      w.breakDoor(a, a.floor, bd.L, dt);
-      return;
-    }
+    if (bd) { smash(w, a, bd, dt); return; }
     a.breakingAt = null;
 
     /* 追人的时候盯住本人，不追他刚才的位置 */
