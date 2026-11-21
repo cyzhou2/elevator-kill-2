@@ -21,6 +21,11 @@ var World = (function () {
     floor: 1,           // 玩家所在层
     viewFloor: 1,       // 正在渲染的楼层
     elevators: [],      // 2 部
+    fuses: [],           // 配电箱 [{floor,x,y,done,prog}]
+    power: [],           // power[floor] = 该层已通电
+    lives: 2,            // 玩家剩余次数
+    repair: null,        // { index, t } 正在修的配电箱
+    escaped: false,
     hallUp: [],          // hallUp[floor]   = true 表示有人在等上楼
     hallDown: [],        // hallDown[floor] = true 表示有人在等下楼
     stairDoors: [],     // stairDoors[floor] = { A:{...}, B:{...} }
@@ -57,6 +62,8 @@ var World = (function () {
     W.tension = 0; W.heartbeat = 0; W.lastSeenKiller = null;
 
     W.hallUp = []; W.hallDown = []; W.stairDoors = [];
+    W.fuses = []; W.power = []; W.repair = null; W.lives = (cfg.PLAYER && cfg.PLAYER.lives) || 2; W.escaped = false;
+    for (var pf0 = 0; pf0 <= cfg.FLOORS; pf0++) W.power[pf0] = false;
     for (var f = 0; f <= cfg.FLOORS; f++) {
       W.hallUp[f] = false;
       W.hallDown[f] = false;
@@ -107,6 +114,9 @@ var World = (function () {
       var kk = spawnKiller(k, fq, rnd(4, G.L - 4), rnd(0.7, G.corridor.h - 0.7));
       W.actors.push(kk);
     }
+
+    /* —— 配电箱：随机楼层 + 墙上位置 —— */
+    buildFuses(cfg, G);
 
     W.floor = p.floor;
     W.viewFloor = p.floor;
@@ -228,6 +238,119 @@ var World = (function () {
 
   /* ================= 事件 / 噪声 ================= */
 
+  /* ================= 目标：修配电箱 → 回大厅逃生 ================= */
+
+  var FUSE_SPOTS = [
+    { x: 4.0, y: 0.62 }, { x: 6.2, y: 0.62 }, { x: 8.4, y: 0.62 },
+    { x: 10.6, y: 0.62 }, { x: 12.8, y: 0.62 }, { x: 15.0, y: 0.62 },
+    { x: 4.0, y: 2.28 }, { x: 12.8, y: 2.28 }
+  ];
+
+  function buildFuses(cfg, geom) {
+    var n = (cfg.OBJ && cfg.OBJ.fuses) || 3;
+    var pool = [];
+    for (var f = 2; f <= cfg.FLOORS; f++) pool.push(f);
+    /* 洗牌 */
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = Math.floor(rand() * (i + 1));
+      var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
+    for (var k = 0; k < n && k < pool.length; k++) {
+      var fl = pool[k];
+      var spot = FUSE_SPOTS[Math.floor(rand() * FUSE_SPOTS.length)];
+      W.fuses.push({ floor: fl, x: spot.x, y: spot.y, done: false, prog: 0 });
+    }
+    W.fuses.sort(function (a, b) { return a.floor - b.floor; });
+  }
+
+  function fuseOnFloor(f) {
+    for (var i = 0; i < W.fuses.length; i++) if (W.fuses[i].floor === f) return W.fuses[i];
+    return null;
+  }
+
+  function fusesDone() {
+    var n = 0;
+    for (var i = 0; i < W.fuses.length; i++) if (W.fuses[i].done) n++;
+    return n;
+  }
+
+  function allFusesDone() { return W.fuses.length > 0 && fusesDone() === W.fuses.length; }
+
+  /** 玩家跟前有没有能修的配电箱 */
+  function nearFuse() {
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor") return null;
+    for (var i = 0; i < W.fuses.length; i++) {
+      var f = W.fuses[i];
+      if (f.done || f.floor !== p.floor) continue;
+      if (dist(p.x, p.y, f.x, f.y) <= ((Cfg.OBJ && Cfg.OBJ.touchDist) || 1.0)) return f;
+    }
+    return null;
+  }
+
+  /** 1F 大厅的紧急逃生按钮 */
+  function nearExit() {
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor" || p.floor !== 1) return false;
+    var ex = G.hallCX - 1.6, ey = G.hallY0 + 0.55;
+    return dist(p.x, p.y, ex, ey) < 1.1;
+  }
+
+  /** 每帧推进修理 */
+  function updateRepair(dt) {
+    var O = Cfg.OBJ || {};
+    var p = W.player;
+    var f = W.repair ? W.fuses[W.repair.index] : null;
+    if (!W.repair || !f || f.done || !p || !p.alive || p.space !== "floor" || p.floor !== f.floor) {
+      W.repair = null;
+      return;
+    }
+    if (dist(p.x, p.y, f.x, f.y) > (O.breakDist || 1.5)) { W.repair = null; return; }
+
+    W.repair.t += dt;
+    W.repair.noiseT = (W.repair.noiseT || 0) + dt;
+    if (W.repair.noiseT >= (O.noiseEvery || 0.8)) {
+      W.repair.noiseT = 0;
+      emitNoise(f.floor, f.x, f.y, O.noiseRadius || 12, "repair");
+      if (window.Audio2) Audio2.repair(true);
+    }
+
+    f.prog = Math.min(1, W.repair.t / (O.repairSec || 6));
+    if (f.prog >= 1) {
+      f.done = true;
+      W.repair = null;
+      W.power[f.floor] = true;
+      W.flash = 0.55;
+      if (window.Audio2) Audio2.powerOn();
+      addEvent("你修好了 " + f.floor + "F 的配电箱（" + fusesDone() + "/" + W.fuses.length + "）", "obj", f.floor);
+      emitNoise(f.floor, f.x, f.y, 8, "power");
+      if (allFusesDone()) {
+        addEvent("全部恢复供电 —— 回 1F 大厅按紧急按钮离开", "obj", null);
+        if (window.Audio2) Audio2.ding(0.9);
+      }
+    }
+  }
+
+  /** 玩家按"用"：修配电箱 / 按紧急按钮 */
+  function playerUse() {
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor") return false;
+    if (allFusesDone() && nearExit()) {
+      W.escaped = true;
+      endRound("escape");
+      return true;
+    }
+    var f = nearFuse();
+    if (f) {
+      if (!W.repair || W.repair.index !== W.fuses.indexOf(f)) {
+        W.repair = { index: W.fuses.indexOf(f), t: f.prog * ((Cfg.OBJ && Cfg.OBJ.repairSec) || 6), noiseT: 0 };
+        if (window.Audio2) Audio2.repair(true);
+      }
+      return true;
+    }
+    return false;
+  }
+
   function addEvent(text, kind, floor) {
     W.events.push({ t: W.time, text: text, kind: kind || "sys", floor: floor == null ? null : floor });
     if (W.events.length > 300) W.events.shift();
@@ -239,7 +362,7 @@ var World = (function () {
       var a = W.actors[i];
       if (a.kind !== "killer" || !a.alive || a.floor !== floor) continue;
       if (dist(a.x, a.y, x, y) <= radius) {
-        a.heard = { x: x, y: y, t: W.time, kind: kind };
+        a.heard = { x: x, y: y, floor: floor, t: W.time, kind: kind };
       }
     }
   }
@@ -619,6 +742,11 @@ var World = (function () {
   function update(dt) {
     if (W.over) return;
     W.time += dt;
+    if (W.player) {
+      if (W.player.hurtT > 0) W.player.hurtT = Math.max(0, W.player.hurtT - dt);
+      if (W.player.invuln > 0) W.player.invuln = Math.max(0, W.player.invuln - dt);
+    }
+    updateRepair(dt);
 
     /* 玩家楼层 / 正在渲染的楼层 */
     if (W.player) {
@@ -732,6 +860,29 @@ var World = (function () {
   }
 
   function catchKid(kid, killer) {
+    /* 玩家有两条命：第一次被抓只是受伤，被打退、短暂无敌，杀人犯会被甩开 */
+    if (kid.controlled && W.lives > 1) {
+      W.lives--;
+      kid.hurtT = (Cfg.PLAYER && Cfg.PLAYER.hurtSec) || 12;
+      kid.invuln = (Cfg.PLAYER && Cfg.PLAYER.invulnSec) || 3;
+      kid.grip = 0;
+      W.shake = 1;
+      W.flash = 0.8;
+      W.blood.push({ floor: kid.floor, x: kid.x, y: kid.y, r: 0.5, a: 0.4 });
+      if (W.repair) W.repair = null;
+      addEvent("你被 " + killer.name + " 抓住了！剩 " + W.lives + " 条命", "hurt", kid.floor);
+      emitNoise(kid.floor, kid.x, kid.y, 9, "scream");
+      /* 杀人犯被甩开：转身走开几秒 */
+      killer.state = "patrol";
+      killer.catching = null;
+      killer.aiTimer = 3.5;
+      killer.target = null;
+      killer.chaseKid = null;
+      killer.path = null;
+      killer.chaseCool = W.time + 4;
+      if (window.Audio2) Audio2.hurt();
+      return;
+    }
     kid.alive = false;
     kid.caughtAt = W.time;
     kid.grip = 0;
@@ -764,6 +915,11 @@ var World = (function () {
     W.over = true;
     W.running = false;
     W.reason = reason;
+    if (reason === "escape") {
+      W.score = Math.round(1200 + (Cfg.ROUND_SEC - W.time) * 4 + fusesDone() * 150);
+      addEvent("你按下了紧急按钮 —— 门开了", "obj", 1);
+      return;
+    }
     var p = W.player;
     if (reason === "time" && p.alive) W.score = Math.round(W.time * Cfg.SCORE.perSecond + Cfg.SCORE.surviveBonus);
     addEvent(reason === "time" ? "时间到" : reason === "caught" ? "你被抓住了" : "全员被抓", "sys", null);
@@ -779,6 +935,9 @@ var World = (function () {
     var canSprint = sprint && p.stamina > 1 && len > 0.1;
     p.sprinting = canSprint;
     var sp = canSprint ? Cfg.KID.sprint : Cfg.KID.speed;
+    /* 受伤时慢一点 */
+    var hurtMoveMul = (p.hurtT > 0 && Cfg.PLAYER) ? Cfg.PLAYER.hurtSpeed : 1;
+    sp *= hurtMoveMul;
     if (canSprint) p.stamina = Math.max(0, p.stamina - Cfg.KID.staminaDrain * dt);
     else p.stamina = Math.min(Cfg.KID.stamina, p.stamina + Cfg.KID.staminaRegen * dt);
 
@@ -939,6 +1098,17 @@ var World = (function () {
     get stairDoors() { return W.stairDoors; },
     get hallUp() { return W.hallUp; },
     get hallDown() { return W.hallDown; },
+    get fuses() { return W.fuses; },
+    fuseOnFloor: fuseOnFloor,
+    get fusesDone() { return fusesDone(); },
+    get fuseTotal() { return W.fuses.length; },
+    allFusesDone: allFusesDone,
+    get lives() { return W.lives; },
+    get repair() { return W.repair; },
+    get power() { return W.power; },
+    nearFuse: nearFuse,
+    nearExit: nearExit,
+    playerUse: playerUse,
     panelVisible: panelVisible, canCall: canCall,
     get events() { return W.events; },
     get noises() { return W.noises; },

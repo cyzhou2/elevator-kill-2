@@ -404,7 +404,8 @@ var Render = (function () {
     c.translate(-g.minX * bakeS, -g.minY * bakeS);
     c.scale(bakeS, bakeS);
 
-    var dark = view.inCar ? 0.82 : 0.865;
+    var powered = !!(World.power && World.power[world.viewFloor]);
+    var dark = view.inCar ? 0.82 : (powered ? 0.7 : 0.865);
     c.globalCompositeOperation = "source-over";
     c.fillStyle = "rgba(2,3,3," + dark + ")";
     c.fillRect(g.minX, g.minY, g.width, g.height);
@@ -527,6 +528,7 @@ var Render = (function () {
 
     /* 4. 电梯 */
     for (var i = 0; i < world.elevators.length; i++) drawElevator(g, world, world.elevators[i]);
+    drawObjectives(world);
 
     /* 5. 角色（只画看得见的） */
     drawActors(world);
@@ -877,6 +879,82 @@ var Render = (function () {
     var txt = near ? (Math.round(e.floor) + "F" + (e.dir > 0 ? "▲" : e.dir < 0 ? "▼" : "")) : "--";
     ctx.fillText(txt, gap.x + gap.w / 2, cy - 0.012);
     ctx.restore();
+  }
+
+  /* ---------- 目标物：配电箱 + 1F 紧急按钮 ---------- */
+  function drawObjectives(world) {
+    var p = world.player;
+    if (!p || !p.alive) return;
+    var lit = 1;
+
+    /* 每层的配电箱 */
+    for (var i = 0; i < world.fuses.length; i++) {
+      var f = world.fuses[i];
+      if (f.floor !== world.viewFloor) continue;
+      var prog = f.prog || 0;
+      var w2 = 0.34, h2 = 0.3;
+      /* 箱体（贴墙） */
+      ctx.fillStyle = f.done ? "#25302a" : "#2a2521";
+      ctx.fillRect(f.x - w2 / 2, f.y - h2 - 0.06, w2, h2);
+      ctx.strokeStyle = f.done ? "#3f5a4c" : "#4a3f34";
+      ctx.lineWidth = 0.02;
+      ctx.strokeRect(f.x - w2 / 2, f.y - h2 - 0.06, w2, h2);
+      /* 指示灯：没修好是红光慢闪，修好是绿光常亮 */
+      var pulse = f.done ? 1 : 0.45 + 0.35 * Math.sin(world.time * 3.2 + i);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      var lg = ctx.createRadialGradient(f.x, f.y - 0.2, 0.01, f.x, f.y - 0.2, 0.9);
+      lg.addColorStop(0, f.done ? "rgba(120,220,160," + 0.3 * pulse + ")" : "rgba(230,80,60," + 0.34 * pulse + ")");
+      lg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = lg;
+      ctx.fillRect(f.x - 0.9, f.y - 1.1, 1.8, 1.8);
+      ctx.restore();
+      ctx.fillStyle = f.done ? "#8fe0b0" : "#e05a4a";
+      ctx.beginPath();
+      ctx.arc(f.x, f.y - 0.2, 0.045, 0, 6.283);
+      ctx.fill();
+
+      /* 修理进度环 */
+      if (!f.done && prog > 0) {
+        ctx.strokeStyle = "rgba(0,0,0,0.5)";
+        ctx.lineWidth = 0.07;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 0.42, 0, 6.283);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(201,168,106,0.95)";
+        ctx.lineWidth = 0.07;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 0.42, -Math.PI / 2, -Math.PI / 2 + 6.283 * prog);
+        ctx.stroke();
+      }
+    }
+
+    /* 1F 大厅的紧急按钮（全部修好后亮起） */
+    if (world.viewFloor === 1) {
+      var g = World.geom;
+      var ex = g.hallCX - 1.6, ey = g.hallY0 + 0.55;
+      var ready = !!(world.allFusesDone && world.allFusesDone());
+      /* 面板 */
+      ctx.fillStyle = "#2b2320";
+      ctx.fillRect(ex - 0.22, ey - 0.42, 0.44, 0.42);
+      ctx.strokeStyle = ready ? "#7a5f31" : "#3a332c";
+      ctx.lineWidth = 0.02;
+      ctx.strokeRect(ex - 0.22, ey - 0.42, 0.44, 0.42);
+      /* 按钮 */
+      var pl = ready ? (0.6 + 0.4 * Math.sin(world.time * 4)) : 0.25;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      var lg2 = ctx.createRadialGradient(ex, ey, 0.01, ex, ey, 1.1);
+      lg2.addColorStop(0, "rgba(230,190,110," + 0.36 * pl + ")");
+      lg2.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = lg2;
+      ctx.fillRect(ex - 1.1, ey - 1.1, 2.2, 2.2);
+      ctx.restore();
+      ctx.fillStyle = ready ? "#e6c07a" : "#6b5a44";
+      ctx.beginPath();
+      ctx.arc(ex, ey - 0.12, 0.1, 0, 6.283);
+      ctx.fill();
+    }
   }
 
   function litAmount(world, x, y) {

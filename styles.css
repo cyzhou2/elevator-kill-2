@@ -419,3 +419,42 @@ body.inCar #joy { display: none; }
   body #carActs { right: 12px; bottom: 8px; gap: 6px; }
   body #carActs .cact { min-width: 46px; height: 46px; font-size: 13px; }
 }
+
+
+/* ---------- 目标面板 ---------- */
+#objPanel {
+  position: absolute; left: 16px; top: 82px; z-index: 6;
+  min-width: 178px; padding: 9px 11px 8px;
+  background: rgba(9, 12, 12, .74);
+  border: 1px solid #232b29; border-radius: 6px;
+  backdrop-filter: blur(2px);
+}
+.objRow1 { display: flex; align-items: baseline; gap: 7px; }
+.objLabel { font-size: 10px; letter-spacing: 2px; color: #6d7a76; }
+#objCount { font-size: 17px; color: #e6d9b6; font-variant-numeric: tabular-nums; }
+.objLives { margin-left: auto; font-size: 12px; color: #b8564c; letter-spacing: 2px; }
+.objFloors { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+.objFloors span {
+  font-size: 10.5px; padding: 1px 5px; border-radius: 3px;
+  color: #8d9a95; background: #161c1b; border: 1px solid #232b29;
+  font-variant-numeric: tabular-nums;
+}
+.objFloors span.done { color: #2a3a32; background: #1d2a24; border-color: #2c4438; text-decoration: line-through; }
+.objFloors span.here { color: #ffd9a0; border-color: #6b552e; }
+.objTask { margin-top: 6px; font-size: 10.5px; color: #7d8a86; line-height: 1.4; }
+.objTask.ready { color: #e6c07a; }
+
+/* 修理读条（屏幕下方中央） */
+#repairBar {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--ctl) + 190px);
+  width: 220px; z-index: 9;
+}
+#repairBar .rbLabel { font-size: 10.5px; color: #c9b48a; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+#repairBar .rbTrack { height: 6px; background: #141a19; border: 1px solid #2b3331; border-radius: 3px; overflow: hidden; }
+#repairBar .rbFill { height: 100%; width: 0%; background: linear-gradient(90deg, #6b552e, #c9a86a); }
+@media (max-width: 820px), (orientation: portrait) {
+  #objPanel { top: 96px; left: 10px; min-width: 0; padding: 7px 9px; }
+  #objCount { font-size: 15px; }
+  #repairBar { bottom: calc(var(--ctl) + 148px); width: 180px; }
+}

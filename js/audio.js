@@ -315,6 +315,59 @@ var Audio2 = (function () {
     humGain.gain.value = Math.max(0, Math.min(1, level)) * 0.05;
   }
 
+  /* 拧螺丝/电火花：短促的电流噪声，反问自己"有人听见了吗" */
+  function repair(vol) {
+    if (!ready || muted) return;
+    noiseBurst(0.09, 0.05 * (vol || 1), 2600, 4);
+    var o = ctx.createOscillator();
+    o.type = "square";
+    var t0 = ctx.currentTime;
+    o.frequency.setValueAtTime(120 + Math.random() * 60, t0);
+    o.frequency.exponentialRampToValueAtTime(60, t0 + 0.12);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.03 * (vol || 1), t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.14);
+    o.connect(g); g.connect(bus);
+    o.start(t0); o.stop(t0 + 0.16);
+  }
+
+  /* 通电：低频冲击 + 一阵电流嗡鸣 */
+  function powerOn() {
+    if (!ready || muted) return;
+    var o = ctx.createOscillator();
+    o.type = "sawtooth";
+    var t0 = ctx.currentTime;
+    o.frequency.setValueAtTime(52, t0);
+    o.frequency.linearRampToValueAtTime(96, t0 + 0.5);
+    var f = ctx.createBiquadFilter();
+    f.type = "lowpass"; f.frequency.setValueAtTime(240, t0);
+    f.frequency.linearRampToValueAtTime(1400, t0 + 0.55);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(0.09, t0 + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0006, t0 + 1.4);
+    o.connect(f); f.connect(g); g.connect(bus);
+    o.start(t0); o.stop(t0 + 1.5);
+    noiseBurst(0.3, 0.05, 1800, 2);
+  }
+
+  /* 受伤：闷响 + 耳鸣 */
+  function hurt() {
+    if (!ready || muted) return;
+    noiseBurst(0.28, 0.18, 220, 1.2);
+    var o = ctx.createOscillator();
+    o.type = "sine";
+    var t0 = ctx.currentTime;
+    o.frequency.setValueAtTime(1500, t0);
+    o.frequency.linearRampToValueAtTime(900, t0 + 1.6);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(0.05, t0 + 0.1);
+    g.gain.exponentialRampToValueAtTime(0.0004, t0 + 1.8);
+    o.connect(g); g.connect(bus);
+    o.start(t0); o.stop(t0 + 1.9);
+  }
+
   function update(dt, tensionNow) {
     if (!ready) return;
     tension = tensionNow;
@@ -360,6 +413,7 @@ var Audio2 = (function () {
     catchSound: catchSound, scream: scream,
     whisper: whisper, creak: creak, farSteps: farSteps,
     pipeKnock: pipeKnock, breath: breath, setCarHum: setCarHum,
+    repair: repair, powerOn: powerOn, hurt: hurt,
     setMute: function (v) { muted = v; if (master) master.gain.value = muted ? 0 : CFG.AUDIO.master; },
     get muted() { return muted; },
     get ready() { return ready; }

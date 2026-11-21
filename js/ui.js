@@ -12,7 +12,8 @@ var UI = (function () {
 
   function init(g) {
     game = g;
-    ["clock", "floorNo", "aliveNo", "hint", "carPanel", "carPanelTitle", "carFloors",
+    ["clock", "floorNo", "aliveNo", "hint", "objPanel", "objCount", "objLives", "objFloors", "objTask",
+      "repairBar", "rbFill", "rbLabel", "carPanel", "carPanelTitle", "carFloors",
       "carExit", "callPanel", "cpReadC", "cpReadD", "cpUp", "cpDown", "stairPanel", "stUp", "stDown", "carPad", "carActs",
       "overlay", "overlayCard",
       "pause", "pauseResume", "pauseRestart", "joy", "knob", "staminaBar", "flashMsg"].forEach(function (k) {
@@ -125,6 +126,9 @@ var UI = (function () {
       }
     }
 
+    /* 目标面板 */
+    updateObjectives(W);
+
     /* 轿厢内方向键 */
     var showPad = !!(W.player && W.player.space === "car");
     if (showPad !== lastCarPad) {
@@ -171,11 +175,55 @@ var UI = (function () {
     }
   }
 
+  /* ---------- 目标面板 / 读条 ---------- */
+  var lastObjKey = "", lastBarKey = "";
+  function updateObjectives(W) {
+    var p = W.player;
+    if (!el.objPanel) return;
+    var done = W.fusesDone || 0;
+    var total = W.fuseTotal || (W.fuses ? W.fuses.length : 0);
+    var key = done + "/" + total + "|" + W.lives + "|" + (p ? p.floor : 0) + "|" + (W.allFusesDone && W.allFusesDone() ? 1 : 0);
+    if (key !== lastObjKey) {
+      lastObjKey = key;
+      el.objCount.textContent = done + "/" + total;
+      el.objLives.textContent = new Array(Math.max(0, W.lives || 0) + 1).join("♥") || "—";
+      var html = "";
+      (W.fuses || []).forEach(function (f) {
+        var cls = f.done ? "done" : (p && f.floor === p.floor ? "here" : "");
+        html += '<span class="' + cls + '">' + f.floor + "F</span>";
+      });
+      el.objFloors.innerHTML = html;
+      if (W.allFusesDone && W.allFusesDone()) {
+        el.objTask.textContent = p && p.floor === 1 ? "去大厅按紧急按钮出门" : "回 1F 大厅，按紧急按钮";
+        el.objTask.className = "objTask ready";
+      } else {
+        el.objTask.textContent = "修好 " + total + " 处配电箱（站到箱子旁按 用）";
+        el.objTask.className = "objTask";
+      }
+    }
+
+    /* 修理读条 */
+    var rp = W.repair;
+    var showBar = !!(rp && p && p.space === "floor");
+    var bkey = showBar ? Math.round((W.fuses[rp.index].prog || 0) * 100) + "" : "off";
+    if (bkey !== lastBarKey) {
+      lastBarKey = bkey;
+      if (el.repairBar) el.repairBar.classList.toggle("hidden", !showBar);
+      if (showBar && el.rbFill) {
+        el.rbFill.style.width = Math.round((W.fuses[rp.index].prog || 0) * 100) + "%";
+        el.rbLabel.textContent = "修理中… 别停下";
+      }
+    }
+  }
+
   function hintFor(W) {
     var p = W.player;
     if (!p.alive) return "";
     if (p.space === "stair") return "楼梯上…";
     if (p.space === "car") return "左下方向键走动 · 右侧选层 · 右下 <b>出</b> 出门";
+    if (W.allFusesDone && W.allFusesDone() && W.nearExit && W.nearExit()) return "按 <b>用</b> / 点面板 —— 按下紧急按钮离开";
+    if (W.repair) return "修理中… 离开就中断（进度会保留）";
+    if (W.nearFuse && W.nearFuse()) return "按 <b>用</b> 修配电箱 · 声音会招来它";
     var g = W.geom;
     if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼";
     if (W.nearDoor && W.nearDoor()) {
@@ -200,15 +248,24 @@ var UI = (function () {
   }
 
   function showEnd(W) {
-    var caught = W.reason === "caught";
-    var title = caught ? "连 接 中 断" : W.reason === "time" ? "天 亮 了" : "全 员 失 联";
     var me = W.player;
-    var score = caught ? Math.round(W.time * CFG.SCORE.perSecond) : Math.round(W.time * CFG.SCORE.perSecond + CFG.SCORE.surviveBonus);
+    var escape = W.reason === "escape";
+    var caught = W.reason === "caught" || W.reason === "allcaught";
+    var timeUp = W.reason === "time";
+    var title = escape ? "你 出 去 了" : caught ? "连 接 中 断" : timeUp ? "天 亮 了" : "全 员 失 联";
+    var sub = escape
+      ? "在 " + fmtTime(W.time) + " 修好 " + (W.fusesDone || 0) + "/" + (W.fuseTotal || 0) + " 处配电箱，从 1F 走了出去"
+      : caught
+        ? "你在 " + me.floor + "F 被抓住了 · 修好 " + (W.fusesDone || 0) + "/" + (W.fuseTotal || 0)
+        : timeUp
+          ? "没能在天亮前修完 · 修好 " + (W.fusesDone || 0) + "/" + (W.fuseTotal || 0)
+          : "孩子们都失联了";
+    var score = W.score || Math.round(W.time * CFG.SCORE.perSecond);
     el.overlayCard.innerHTML =
-      '<div class="endTitle' + (caught ? " red" : "") + '">' + title + "</div>" +
-      '<div class="endSub">' + (caught ? "你在 " + me.floor + "F 被抓住了 · 存活 " + fmtTime(W.time) : "存活 " + fmtTime(W.time) + " · 无人再追你") + "</div>" +
+      '<div class="endTitle' + (escape ? "" : " red") + '">' + title + "</div>" +
+      '<div class="endSub">' + sub + "</div>" +
       '<div class="endScore">' + score + "</div>" +
-      '<div class="endUnit">总分</div>' +
+      '<div class="endUnit">' + (escape ? "逃生分" : "分") + "</div>" +
       '<div class="endBtns"><button id="againBtn" class="btn primary">再来一次</button></div>' +
       '<div class="endFoot">按 R 重新开始</div>';
     el.overlay.classList.remove("hidden");

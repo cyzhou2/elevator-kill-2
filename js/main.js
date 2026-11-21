@@ -57,6 +57,7 @@
       if (p.space === "car") { World.playerToggleCarDoor(true); return; }
       if (inStairZone) { World.playerTryStairs(1); return; }          // E = 上楼
       if (World.nearDoor()) { World.playerToggleDoor(); return; }
+      if (World.playerUse && World.playerUse()) return;      // 修配电箱 / 按紧急按钮
       if (world.panelVisible()) World.playerCallElevator(1);
       return;
     }

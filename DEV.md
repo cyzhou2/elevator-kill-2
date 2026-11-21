@@ -150,6 +150,50 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
+## 1.1 目标制玩法（v2.0）
+
+### 一局的流程
+
+```
+开局 → 随机 3 个楼层生成配电箱（HUD 显示楼层）
+     → 逐个「站定 + 按 用」修理（6s/个，噪音 12m/0.8s）
+     → 每修好一个：该层通电（画面变亮）
+     → 3/3 完成：1F 大厅紧急按钮亮起
+     → 回 1F 按 用 → 逃生成功（结算分数）
+失败：时间到 / 被抓住第二次
+```
+
+### 数值（`config.js`）
+
+```js
+OBJ: {
+  fuses: 3,            // 要修几个
+  repairSec: 6.0,      // 每个要多久
+  noiseEvery: 0.8,     // 修理噪音间隔
+  noiseRadius: 12.0,   // 噪音半径（直接决定难度）
+  touchDist: 1.0,      // 多近算在修
+  breakDist: 1.5       // 走多远中断（进度保留）
+},
+PLAYER: { lives: 2, hurtSec: 12, hurtSpeed: 0.86, invulnSec: 3 }
+```
+
+### 实现位置
+
+| 内容 | 位置 |
+| --- | --- |
+| 生成配电箱 / 修理判定 / 逃生判定 | `world.js`：`buildFuses`、`nearFuse`、`nearExit`、`updateRepair`、`playerUse` |
+| 受伤处理 | `world.js` 的 `catchKid`（`W.lives > 1` 分支） |
+| 通电变亮 | `render.js` 的 `buildLight`（`World.power[viewFloor]` → dark 0.865→0.70） |
+| 配电箱 / 紧急按钮绘制 | `render.js` 的 `drawObjectives` |
+| 目标面板 / 读条 / 结算 | `ui.js` 的 `updateObjectives`、`showEnd` |
+| 输入 | `main.js` 的 `doAction('interact')` → `World.playerUse()` |
+
+### 调难度最快的方式
+
+- 想更简单：`OBJ.noiseRadius` 降到 8，或 `repairSec` 降到 4，或 `PLAYER.lives` 改 3。
+- 想更凶：`OBJ.noiseRadius` 拉到 16、`noiseEvery` 降到 0.5；或 `OBJ.fuses` 改成 4~5。
+- 注意：`fuses` 超过 5 时 5 分钟会不够，把 `ROUND_SEC` 一起调。
+
 ## 1.2 AI 现状（v1.7）
 
 ### 小孩（`ai.js` · `kidUpdate`）

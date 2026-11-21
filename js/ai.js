@@ -175,8 +175,14 @@ var AI = (function () {
       return;
     }
 
-    /* 2. 听到的动静 */
-    if (a.heard && now - a.heard.t < 4) {
+    /* 2. 听到的动静（修理声最容易把它引过来） */
+    if (a.heard && now - a.heard.t < (a.heard.kind === "repair" ? 9 : 4)) {
+      if (a.heard.floor != null && a.heard.floor !== a.floor) {
+        a.state = "patrol";
+        setTravel(w, a, a.heard.floor);
+        travelStep(w, a, dt);
+        return;
+      }
       a.state = "search";
       a.target = { x: a.heard.x, y: a.heard.y, floor: a.floor };
       a.path = null;
