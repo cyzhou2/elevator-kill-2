@@ -21,7 +21,6 @@ var World = (function () {
     floor: 1,           // 玩家所在层
     viewFloor: 1,       // 正在渲染的楼层
     elevators: [],      // 2 部
-    pallets: [],         // 板子：pallets[floor] = [{open,amt,broken,breaking}]
     fuses: [],           // 配电箱 [{floor,x,y,done,prog}]
     power: [],           // power[floor] = 该层已通电
     lives: 2,            // 玩家剩余次数
@@ -71,10 +70,6 @@ var World = (function () {
       W.stairDoors[f] = {
         A: makeDoor("A", f), B: makeDoor("B", f)
       };
-      W.pallets[f] = [];
-      for (var pi0 = 0; pi0 < G.pallets.length; pi0++) {
-        W.pallets[f].push({ open: true, amt: 1, broken: false, breaking: 0, breakingBy: null });
-      }
     }
 
     W.elevators = [
@@ -197,13 +192,6 @@ var World = (function () {
     var dA = W.stairDoors[floor].A, dB = W.stairDoors[floor].B;
     if (!dA.broken && !dA.open && dA.amt < 0.55) list.push(G.stairDoorA.rect);
     if (!dB.broken && !dB.open && dB.amt < 0.55) list.push(G.stairDoorB.rect);
-    /* 关着的板子（横跨走廊，谁也别想过） */
-    if (W.pallets[floor]) {
-      for (var pp = 0; pp < W.pallets[floor].length; pp++) {
-        var pst = W.pallets[floor][pp];
-        if (!pst.broken && !pst.open && pst.amt < 0.55) list.push(G.pallets[pp]);
-      }
-    }
     /* 关着的电梯门 */
     for (var i = 0; i < W.elevators.length; i++) {
       var e = W.elevators[i];
@@ -337,54 +325,6 @@ var World = (function () {
     return k;
   }
 
-  /** 离玩家最近的板子（返回 {i, st, rect}） */
-  function nearPallet() {
-    var p = W.player;
-    if (!p || !p.alive || p.space !== "floor") return null;
-    var list = W.pallets[p.floor];
-    if (!list) return null;
-    for (var i = 0; i < list.length; i++) {
-      var rc = G.pallets[i];
-      var cx = rc.x + rc.w / 2, cy = rc.y + rc.h / 2;
-      if (dist(p.x, p.y, cx, cy) < 1.5) return { i: i, st: list[i], rect: rc };
-    }
-    return null;
-  }
-
-  function togglePallet(i) {
-    var p = W.player;
-    if (!p || p.space !== "floor") return false;
-    var st = W.pallets[p.floor] && W.pallets[p.floor][i];
-    if (!st || st.broken) return false;
-    st.open = !st.open;
-    st.breaking = 0;
-    st.breakingBy = null;
-    var rc = G.pallets[i];
-    emitNoise(p.floor, rc.x + rc.w / 2, rc.y + rc.h / 2, Cfg.DOOR.noise, st.open ? "door" : "slam");
-    if (window.Audio2) Audio2.door(st.open);
-    return true;
-  }
-
-  /** 它砸板子 */
-  function breakPallet(killer, floor, i, dt) {
-    var st = W.pallets[floor] && W.pallets[floor][i];
-    if (!st || st.open || st.broken) { if (st) { st.breaking = 0; st.breakingBy = null; } return false; }
-    st.breakingBy = killer ? killer.id : "x";
-    st.breaking += dt / (Cfg.DOOR.breakSec || 2.4);
-    if (st.breaking >= 1) {
-      st.broken = true;
-      st.breaking = 0;
-      st.breakingBy = null;
-      st.open = true;
-      st.amt = 1;
-      var rc = G.pallets[i];
-      emitNoise(floor, rc.x + rc.w / 2, rc.y + rc.h / 2, (Cfg.DOOR.breakNoise || 10) + 4, "break");
-      if (window.Audio2) Audio2.door(false);
-      addEvent("走廊的板子被它砸断了（" + floor + "F）", "sys", floor);
-    }
-    return st.broken;
-  }
-
   /** 当前所有可交互对象（供画面上飘出图标） */
   function prompts() {
     var out = [];
@@ -413,17 +353,6 @@ var World = (function () {
           x: ex, y: ey - 0.6, near: dist(p.x, p.y, ex, ey) < 1.15, progress: 0, active: false
         });
       }
-    }
-
-    /* 走廊板子 */
-    var np = nearPallet();
-    if (np && !np.st.broken) {
-      out.push({
-        kind: "pallet", id: String(np.i), icon: "pallet",
-        label: np.st.open ? "拉下板子（挡住走廊）" : "抬起板子",
-        x: np.rect.x + np.rect.w / 2, y: np.rect.y - 0.35, near: true,
-        progress: 0, breaking: np.st.breaking || 0
-      });
     }
 
     /* 楼梯间门（板子） */
@@ -468,9 +397,6 @@ var World = (function () {
       W.escaped = true;
       endRound("escape");
       return true;
-    }
-    if (kind === "pallet") {
-      return togglePallet(parseInt(String(id), 10) || 0);
     }
     if (kind === "door") {
       var L2 = id === "B" ? "B" : "A";
@@ -577,6 +503,20 @@ var World = (function () {
 
     if (a.space === "car") {
       var cr = a.carId === "C" ? G.elev.C.car : G.elev.D.car;
+      var ce = carById(a.carId);
+      var doorOpen = ce && ce.doorsOpen && Math.abs(ce.floor - Math.round(ce.floor)) < 0.06;
+
+      /* 门开着，人往门口走 —— 直接走出去，不需要"出梯"按钮 */
+      if (doorOpen && dy > 0.002 && ny > cr.y + cr.h - r * 0.75) {
+        a.space = "floor";
+        a.floor = Math.round(ce.floor);
+        a.carId = null;
+        a.x = clamp(a.x, cr.x + 0.15, cr.x + cr.w - 0.15);
+        a.y = G.hallY0 + 0.24;
+        if (a.controlled) addEvent("你走出了电梯（" + a.floor + "F）", "you", a.floor);
+        return;
+      }
+
       a.x = clamp(nx, cr.x + r, cr.x + cr.w - r);
       a.y = clamp(ny, cr.y + r, cr.y + cr.h - r);
       return;
@@ -1021,19 +961,6 @@ var World = (function () {
       }
     }
 
-    /* 板子的开合动画 */
-    for (var pf2 = 1; pf2 <= Cfg.FLOORS; pf2++) {
-      var plist = W.pallets[pf2];
-      if (!plist) continue;
-      for (var pj = 0; pj < plist.length; pj++) {
-        var pd = plist[pj];
-        if (pd.broken) { pd.amt = 1; pd.breaking = 0; continue; }
-        if (pd.open) pd.amt = Math.min(1, pd.amt + dt / Cfg.DOOR.openSec);
-        else pd.amt = Math.max(0, pd.amt - dt / Cfg.DOOR.closeSec);
-        if (!pd.breakingBy) pd.breaking = Math.max(0, pd.breaking - dt * 0.6);
-      }
-    }
-
     /* 电梯 */
     for (var e2 = 0; e2 < W.elevators.length; e2++) updateElevator(W.elevators[e2], dt);
 
@@ -1453,8 +1380,6 @@ var World = (function () {
     nearExit: nearExit,
     playerUse: playerUse, boardOpenCar: boardOpenCar,
     prompts: prompts, promptAction: promptAction, breakDoor: breakDoor,
-    breakPallet: breakPallet, nearPallet: nearPallet, togglePallet: togglePallet,
-    get pallets() { return W.pallets; },
     panelVisible: panelVisible, canCall: canCall,
     get events() { return W.events; },
     get noises() { return W.noises; },

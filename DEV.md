@@ -150,6 +150,23 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
+## 0.75 电梯出梯 = 走出去（v2.6）
+
+`world.js` 的 `moveActor` 里，轿厢分支多了一段：
+
+```js
+if (doorOpen && dy > 0.002 && ny > cr.y + cr.h - r * 0.75) {
+  a.space = "floor"; a.floor = Math.round(ce.floor); a.carId = null;
+  a.x = clamp(a.x, cr.x + 0.15, cr.x + cr.w - 0.15);
+  a.y = G.hallY0 + 0.24;
+}
+```
+
+- 也就是「门开着 + 往门口方向走 + 走到南边缘」就自动变成楼层状态，不需要按钮。
+- 轿厢画面里点下沿/门外 → `carToWorld` 直接给一个大厅坐标，人就走过去了。
+- `playerExitCar` 还留着（Space 兼容），但 UI 上的「出」按钮已删除。
+- 杀人犯跟车：`stepKiller` 里如果 `chaseKid` 的人在轿厢且门开着，它会直接朝门口移动并合法进梯。
+
 ## 0.8 板子 / 伤害 / 感知（v2.5）
 
 ### 板子（`geom.pallets` + `world.pallets[floor][i]`）

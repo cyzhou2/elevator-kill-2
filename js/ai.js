@@ -186,7 +186,7 @@ var AI = (function () {
     /* 门被拉上了：不管它在追人还是换层，挡在路上就砸（已经开始砸的继续砸完） */
     if (a.space === "floor") {
       var bd0 = blockedDoor(w, a);
-      var tag0 = bd0 ? (bd0.pallet != null ? "P" + bd0.pallet : bd0.L) : null;
+      var tag0 = bd0 ? bd0.L : null;
       if (bd0 && (a.state === "chase" || a.travel || a.heard || a.breakingAt === tag0)) {
         smash(w, a, bd0, dt);
         return;
@@ -411,19 +411,6 @@ var AI = (function () {
   /** 门挡在前面吗？返回挡路的门 {L,x,y} 或 null */
   function blockedDoor(w, a) {
     var G = w.geom;
-    /* 走廊板子 */
-    var plist = w.state.pallets && w.state.pallets[a.floor];
-    if (plist && G.pallets) {
-      for (var pi = 0; pi < plist.length; pi++) {
-        var pst = plist[pi];
-        if (!pst || pst.open || pst.broken) continue;
-        var pr = G.pallets[pi];
-        var pcx = pr.x + pr.w / 2, pcy = pr.y + pr.h / 2;
-        if (Math.abs(a.x - pcx) > 1.15) continue;
-        if (a.y < pr.y - 0.3 || a.y > pr.y + pr.h + 0.3) continue;
-        return { pallet: pi, x: pcx, y: a.y };
-      }
-    }
     /* 楼梯间门 */
     for (var i = 0; i < 2; i++) {
       var L = i === 0 ? "A" : "B";
@@ -439,11 +426,7 @@ var AI = (function () {
 
   /** 砸挡路的东西（门或板子） */
   function smash(w, a, bd, dt) {
-    if (bd.pallet != null) {
-      a.breakingAt = "P" + bd.pallet;
-      a.face = Math.atan2(0, bd.x - a.x);
-      w.breakPallet(a, a.floor, bd.pallet, dt);
-    } else {
+    {
       a.breakingAt = bd.L;
       a.face = Math.atan2(bd.y - a.y, bd.x - a.x);
       w.breakDoor(a, a.floor, bd.L, dt);
@@ -458,6 +441,25 @@ var AI = (function () {
     var bd = blockedDoor(w, a);
     if (bd) { smash(w, a, bd, dt); return; }
     a.breakingAt = null;
+
+    /* 它追的人进了电梯 —— 门还开着就跟进去 */
+    if (a.state === "chase" && a.chaseKid) {
+      var ck0 = null;
+      for (var fi = 0; fi < w.state.actors.length; fi++) {
+        if (w.state.actors[fi].id === a.chaseKid) { ck0 = w.state.actors[fi]; break; }
+      }
+      if (ck0 && ck0.alive && ck0.space === "car") {
+        var ce0 = w.carById(ck0.carId);
+        if (ce0 && ce0.doorsOpen && Math.abs(ce0.floor - a.floor) < 0.06) {
+          var dxc = ce0.cx - a.x, dyc = (w.geom.hallY0 - 0.3) - a.y;
+          var dc = Math.hypot(dxc, dyc) || 1;
+          var spd = w.cfg.KILLER.chase * (w.threat || 1);
+          a.face = Math.atan2(dyc, dxc);
+          w.__move(a, (dxc / dc) * spd * dt, (dyc / dc) * spd * dt, dt);
+          return;
+        }
+      }
+    }
 
     /* 追人的时候盯住本人，不追他刚才的位置 */
     if (a.state === "chase" && a.chaseKid) {

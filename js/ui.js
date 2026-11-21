@@ -31,7 +31,7 @@ var UI = (function () {
         var a = b.dataset.cact;
         if (a === "open") game.openDoor && game.openDoor();
         else if (a === "close") game.closeDoor && game.closeDoor();
-        else if (a === "exit") game.exitCar && game.exitCar();
+        else if (a === "exit") game.exitCar && game.exitCar();  /* 已撤掉按钮，保留兼容 */
       });
     });
     if (el.cpUp) el.cpUp.onclick = function () { game.callUp && game.callUp(); };
@@ -226,7 +226,7 @@ var UI = (function () {
     var p = W.player;
     if (!p.alive) return "";
     if (p.space === "stair") return "楼梯上…";
-    if (p.space === "car") return "左下方向键走动 · 右侧选层 · 右下 <b>出</b> 出门";
+    if (p.space === "car") return "左下方向键走动 · 右侧选层 · 门开到门口就出去";
     if (W.allFusesDone && W.allFusesDone() && W.nearExit && W.nearExit()) return "点 <b>⛔ 图标</b> 或按 <b>E</b> —— 按下紧急按钮离开";
     if (W.repair) return "修理中… 离开就中断（进度会保留）";
     if (W.nearDoor && W.nearDoor()) {

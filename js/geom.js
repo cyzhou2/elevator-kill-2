@@ -117,11 +117,6 @@ var Geom = (function () {
       /* 门洞里那一小块也算可走，否则人过不去 */
       connectors: [rect(sw, stairDoorY0, t, dw), rect(L - sw - t, stairDoorY0, t, dw),
         rect(gapC.x, gapC.y, doorW, t), rect(gapD.x, gapD.y, doorW, t)],
-      pallets: [
-        /* 走廊里的两块板子：横跨走廊，拉下就完全挡路 */
-        rect(6.2, corridor.y, 0.34, corridor.h),
-        rect(11.6, corridor.y, 0.34, corridor.h)
-      ],
     walk: [corridor, hall, stairA, stairB],
       walls: walls,
       elev: {
