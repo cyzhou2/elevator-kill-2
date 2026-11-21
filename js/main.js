@@ -58,6 +58,8 @@
       if (inStairZone) { World.playerTryStairs(1); return; }          // E = 上楼
       if (World.nearDoor()) { World.playerToggleDoor(); return; }
       if (World.boardOpenCar && World.boardOpenCar()) return;  // 门开着就进梯
+      /* E / 用 也能破译配电箱、按紧急按钮（和点图标等价） */
+      if (World.playerUse && World.playerUse()) return;
       if (world.panelVisible()) World.playerCallElevator(1);
       return;
     }

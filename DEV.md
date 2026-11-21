@@ -157,6 +157,7 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - `prompts()` 返回数组：`{kind, id, icon, label, x, y, near, progress, breaking}`。
 - `kind`：`fuse` / `exit` / `door`；`icon`：`bolt` / `exit` / `door`（画在 `drawPrompts` 里，纯 Canvas 图形）。
 - 点击命中在 `main.js` 的 `hitPrompt(raw)`（半径 26px），优先于「点地走路」。
+- **E / 用 是一等公民**：`doAction('interact')` 里保留 `World.playerUse()`，和点图标等价；两条路都走 `promptAction` 的世界逻辑。
 - 加新交互物：在 `prompts()` 里 push 一条，并在 `promptAction()` 里加一个分支即可。
 
 ### 门（板子）
