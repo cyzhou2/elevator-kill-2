@@ -203,7 +203,7 @@ var UI = (function () {
         el.objTask.textContent = p && p.floor === 1 ? "去大厅按紧急按钮出门" : "回 1F 大厅，按紧急按钮";
         el.objTask.className = "objTask ready";
       } else {
-        el.objTask.textContent = "修好 " + total + " 处配电箱（站到箱子旁按 用）";
+        el.objTask.textContent = "修好 " + total + " 处配电箱（走到箱子旁，点 ⚡ 图标）";
         el.objTask.className = "objTask";
       }
     }
@@ -227,9 +227,14 @@ var UI = (function () {
     if (!p.alive) return "";
     if (p.space === "stair") return "楼梯上…";
     if (p.space === "car") return "左下方向键走动 · 右侧选层 · 右下 <b>出</b> 出门";
-    if (W.allFusesDone && W.allFusesDone() && W.nearExit && W.nearExit()) return "按 <b>用</b> / 点面板 —— 按下紧急按钮离开";
+    if (W.allFusesDone && W.allFusesDone() && W.nearExit && W.nearExit()) return "点 <b>⛔ 图标</b> —— 按下紧急按钮离开";
     if (W.repair) return "修理中… 离开就中断（进度会保留）";
-    if (W.nearFuse && W.nearFuse()) return "按 <b>用</b> 修配电箱 · 声音会招来它";
+    if (W.nearDoor && W.nearDoor()) {
+      var dd2 = W.stairDoors[p.floor][W.nearDoor()];
+      if (dd2 && dd2.broken) return "这扇门已经被它砸烂了";
+      return dd2 && dd2.open ? "门开着 · 点图标拉上挡住它" : "门关着 · 点图标打开（它要砸 2 秒）";
+    }
+    if (W.nearFuse && W.nearFuse()) return "点 <b>⚡ 图标</b> 破译配电箱 · 声音会招来它";
     var g = W.geom;
     if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼";
     if (W.nearDoor && W.nearDoor()) {

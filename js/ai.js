@@ -19,6 +19,12 @@ var AI = (function () {
   /* 走到楼梯口（Nav 自己穿门、自己推门） */
   function goStairZone(w, a, L, dt, speed) {
     var G = w.geom;
+    /* 门被拉上了：先推开（小孩开得快） */
+    var st = w.state.stairDoors[a.floor] && w.state.stairDoors[a.floor][L];
+    if (st && !st.open && !st.broken) {
+      w.autoOpenDoor(a);
+      return false;
+    }
     var zone = L === "A" ? G.stairZoneA : G.stairZoneB;
     var tx = zone.x + zone.w / 2, ty = zone.y + 0.6;
     if (dist(a.x, a.y, tx, ty) < 0.75) return true;
@@ -128,6 +134,18 @@ var AI = (function () {
     if (a.space === "floor" && !a.travel && w.nearStairs && w.nearStairs()) {
       /* 站在楼梯口却没打算换层：说明目标就在本层，走出去 */
       a.path = null;
+    }
+
+    /* 门被拉上了：不管它在追人还是换层，挡在路上就砸（已经开始砸的继续砸完） */
+    if (a.space === "floor") {
+      var bd0 = blockedDoor(w, a);
+      if (bd0 && (a.state === "chase" || a.travel || a.heard || a.breakingAt === bd0.L)) {
+        a.breakingAt = bd0.L;
+        a.face = Math.atan2(bd0.y - a.y, bd0.x - a.x);
+        w.breakDoor(a, a.floor, bd0.L, dt);
+        return;
+      }
+      if (!bd0) a.breakingAt = null;
     }
 
     if (a.space === "car") {
@@ -327,9 +345,35 @@ var AI = (function () {
     if (w.navGo) w.navGo(a, G.hallCX, G.hallY0 + 0.95, dt, 1.4);
   }
 
+  /** 门挡在前面吗？返回挡路的门 {L,x,y} 或 null */
+  function blockedDoor(w, a) {
+    var G = w.geom;
+    for (var i = 0; i < 2; i++) {
+      var L = i === 0 ? "A" : "B";
+      var st = w.state.stairDoors[a.floor][L];
+      if (!st || st.open || st.broken) continue;
+      var dr = L === "A" ? G.stairDoorA.rect : G.stairDoorB.rect;
+      var cx = dr.x + dr.w / 2, cy = dr.y + dr.h / 2;
+      if (dist(a.x, a.y, cx, cy) > 1.15) continue;
+      return { L: L, x: cx, y: cy };
+    }
+    return null;
+  }
+
   function stepKiller(w, a, dt) {
     var C = w.cfg;
     if (a.space !== "floor") return;
+
+    /* 门被拉上了：先砸门（追击里最紧张的一段） */
+    var bd = blockedDoor(w, a);
+    if (bd) {
+      a.breakingAt = bd.L;
+      a.face = Math.atan2(bd.y - a.y, bd.x - a.x);
+      w.breakDoor(a, a.floor, bd.L, dt);
+      return;
+    }
+    a.breakingAt = null;
+
     /* 追人的时候盯住本人，不追他刚才的位置 */
     if (a.state === "chase" && a.chaseKid) {
       for (var ci = 0; ci < w.state.actors.length; ci++) {

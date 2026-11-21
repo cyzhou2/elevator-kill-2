@@ -150,7 +150,25 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
-## 0.9 恐怖氛围系统（v2.2）
+## 0.85 交互图标与板子门（v2.3）
+
+### 图标（`world.prompts()` → `render.drawPrompts()` → 点击 → `world.promptAction()`）
+
+- `prompts()` 返回数组：`{kind, id, icon, label, x, y, near, progress, breaking}`。
+- `kind`：`fuse` / `exit` / `door`；`icon`：`bolt` / `exit` / `door`（画在 `drawPrompts` 里，纯 Canvas 图形）。
+- 点击命中在 `main.js` 的 `hitPrompt(raw)`（半径 26px），优先于「点地走路」。
+- 加新交互物：在 `prompts()` 里 push 一条，并在 `promptAction()` 里加一个分支即可。
+
+### 门（板子）
+
+- 状态：`open`（默认 true）/ `broken`（被砸烂）/ `amt`（0~1 开门动画）/ `breaking`（0~1 读条） / `breakingBy`。
+- 挡路：`wallsAt()` 里 `!broken && !open && amt < 0.55` 时把门矩形加进墙。
+- 破门：`world.breakDoor(killer, floor, landing, dt)`，时长 `DOOR.breakSec`（2.4s），破完 `broken=true` 永久失效。
+- AI：`ai.js` 的 `blockedDoor()` 判定，`killerUpdate` 顶部优先处理（追击/换层/听声都会先砸门）。
+- 小孩：`autoOpenDoor` 只对小孩和玩家以外……准确说是**玩家和杀人犯都不自动开门**，小孩会自动推开。
+- 想更狠：`DOOR.breakSec` 调到 4~5，玩家就有更长的逃生窗口；调到 1.2 会非常压迫。
+
+## 0.9 恐怖氛围系统（v2.2）（v2.2）
 
 ### 音乐层（`audio.js`）
 

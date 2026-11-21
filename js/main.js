@@ -58,7 +58,6 @@
       if (inStairZone) { World.playerTryStairs(1); return; }          // E = 上楼
       if (World.nearDoor()) { World.playerToggleDoor(); return; }
       if (World.boardOpenCar && World.boardOpenCar()) return;  // 门开着就进梯
-      if (World.playerUse && World.playerUse()) return;        // 修配电箱 / 按紧急按钮
       if (world.panelVisible()) World.playerCallElevator(1);
       return;
     }
@@ -107,6 +106,15 @@
   function onStageClick(raw, pt) {
     var p = world.player;
     if (!p || !p.alive || over) return;
+
+    /* 交互图标优先：点它就等于"按住"那个动作 */
+    if (p.space === "floor") {
+      var pr = hitPrompt(raw);
+      if (pr) {
+        World.promptAction(pr.kind, pr.id);
+        return;
+      }
+    }
     /* 轿厢场景：点轿厢内部 = 走过去（手机靠这个移动） */
     if (p.space === "car") {
       var cw = Render.carToWorld(raw.x, raw.y);
@@ -114,6 +122,18 @@
       return;
     }
     handleClick(pt);
+  }
+
+  /** 点到交互图标了吗（屏幕坐标） */
+  function hitPrompt(raw) {
+    var list = World.prompts ? World.prompts() : [];
+    for (var i = 0; i < list.length; i++) {
+      var pr = list[i];
+      var s = Render.w2s(pr.x, pr.y);
+      var d = Math.hypot(raw.x - s.x, raw.y - s.y);
+      if (d <= 26) return pr;
+    }
+    return null;
   }
 
   function handleClick(pt) {

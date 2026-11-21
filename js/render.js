@@ -534,6 +534,7 @@ var Render = (function () {
 
     /* 5. 角色（只画看得见的） */
     drawActors(world);
+    drawPrompts(world);
 
     /* 6. 光照遮罩 */
     buildLight(world, time);
@@ -852,6 +853,28 @@ var Render = (function () {
     /* 门框 */
     ctx.fillStyle = "#14181a";
     ctx.fillRect(r.x, r.y - 0.04, r.w, r.h + 0.08);
+
+    /* 被砸烂的门：只剩半扇斜靠在框上 */
+    if (d.broken) {
+      ctx.fillStyle = "#262a29";
+      ctx.beginPath();
+      ctx.moveTo(r.x + r.w * 0.2, r.y + r.h * 0.1);
+      ctx.lineTo(r.x + r.w * 0.75, r.y + r.h * 0.02);
+      ctx.lineTo(r.x + r.w * 0.9, r.y + r.h * 0.55);
+      ctx.lineTo(r.x + r.w * 0.35, r.y + r.h * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#383e3c";
+      ctx.lineWidth = 0.018;
+      ctx.stroke();
+      /* 地上的碎木 */
+      ctx.fillStyle = "rgba(70,62,50,0.5)";
+      ctx.fillRect(r.x + r.w * 0.1, r.y + r.h * 0.78, 0.1, 0.03);
+      ctx.fillRect(r.x + r.w * 0.6, r.y + r.h * 0.85, 0.07, 0.025);
+      ctx.restore();
+      return;
+    }
+
     /* 门扇：以铰链为轴旋转 */
     var hingeY = r.y + r.h;
     var hingeX = L === "A" ? r.x + r.w : r.x;
@@ -871,6 +894,16 @@ var Render = (function () {
     ctx.arc(dirSign * 0.05, -leafLen * 0.18, 0.035, 0, 6.283);
     ctx.fill();
     ctx.restore();
+
+    /* 正在被砸：门框上一条红色读条 */
+    if (d.breaking > 0.01) {
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(r.x + r.w * 0.1, r.y - 0.15, r.w * 0.8, 0.06);
+      ctx.fillStyle = "rgba(190,60,50,0.9)";
+      ctx.fillRect(r.x + r.w * 0.1, r.y - 0.15, r.w * 0.8 * Math.min(1, d.breaking), 0.06);
+      ctx.restore();
+    }
   }
 
   function drawElevator(g, world, e) {
@@ -1010,6 +1043,94 @@ var Render = (function () {
       ctx.arc(ex, ey - 0.12, 0.1, 0, 6.283);
       ctx.fill();
     }
+  }
+
+  /* ---------- 交互图标：走近可交互物，飘出一个圆形按钮 ---------- */
+  function drawPrompts(world) {
+    var list = world.prompts ? world.prompts() : [];
+    if (!list.length) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (var i = 0; i < list.length; i++) {
+      var pr = list[i];
+      var s = w2s(pr.x, pr.y);
+      if (s.x < 30 || s.x > W - 30 || s.y < 30 || s.y > H - 30) continue;
+      var R = pr.near ? 19 : 15;
+      var alpha = pr.near ? 1 : 0.45;
+
+      ctx.globalAlpha = alpha;
+      /* 外环 */
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, R, 0, 6.283);
+      ctx.fillStyle = "rgba(10,13,13,0.86)";
+      ctx.fill();
+      ctx.strokeStyle = pr.near ? "rgba(201,168,106,0.95)" : "rgba(140,150,146,0.5)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      /* 读条（修理 / 被砸） */
+      var prog = pr.kind === "door" ? (pr.breaking || 0) : (pr.progress || 0);
+      if (prog > 0.01) {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, R + 4, -Math.PI / 2, -Math.PI / 2 + 6.283 * Math.min(1, prog));
+        ctx.strokeStyle = pr.kind === "door" ? "rgba(190,60,50,0.95)" : "rgba(201,168,106,0.95)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+
+      /* 图标 */
+      ctx.strokeStyle = pr.near ? "#e8dcc0" : "#9aa7a2";
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = 2;
+      var cxx = s.x, cyy = s.y;
+      if (pr.icon === "bolt") {
+        /* 闪电 */
+        ctx.beginPath();
+        ctx.moveTo(cxx + 3, cyy - 8);
+        ctx.lineTo(cxx - 4, cyy + 1);
+        ctx.lineTo(cxx + 1, cyy + 1);
+        ctx.lineTo(cxx - 2, cyy + 8);
+        ctx.lineTo(cxx + 5, cyy - 2);
+        ctx.lineTo(cxx, cyy - 2);
+        ctx.closePath();
+        ctx.fill();
+      } else if (pr.icon === "exit") {
+        /* 箭头出门 */
+        ctx.beginPath();
+        ctx.moveTo(cxx - 6, cyy - 7);
+        ctx.lineTo(cxx + 2, cyy - 7);
+        ctx.lineTo(cxx + 2, cyy + 7);
+        ctx.lineTo(cxx - 6, cyy + 7);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cxx + 2, cyy);
+        ctx.lineTo(cxx + 9, cyy);
+        ctx.moveTo(cxx + 6, cyy - 3);
+        ctx.lineTo(cxx + 9, cyy);
+        ctx.lineTo(cxx + 6, cyy + 3);
+        ctx.stroke();
+      } else {
+        /* 门 */
+        ctx.strokeRect(cxx - 5, cyy - 8, 10, 16);
+        ctx.beginPath();
+        ctx.arc(cxx + 2.5, cyy, 1.4, 0, 6.283);
+        ctx.fill();
+      }
+
+      /* 文案 */
+      if (pr.near) {
+        ctx.globalAlpha = 0.95;
+        ctx.font = "11px ui-monospace, monospace";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "rgba(8,10,10,0.8)";
+        var tw = ctx.measureText(pr.label).width;
+        ctx.fillRect(s.x - tw / 2 - 5, s.y + R + 6, tw + 10, 15);
+        ctx.fillStyle = "#d8e0da";
+        ctx.fillText(pr.label, s.x, s.y + R + 17);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   function litAmount(world, x, y) {

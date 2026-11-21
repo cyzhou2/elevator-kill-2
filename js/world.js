@@ -125,7 +125,8 @@ var World = (function () {
   }
 
   function makeDoor(landing, floor) {
-    return { landing: landing, floor: floor, open: false, amt: 0, closing: false };
+    /* 平时是开的；open=false 表示被拉上了（挡路）；broken=true 表示被它破掉了 */
+    return { landing: landing, floor: floor, open: true, amt: 1, closing: false, broken: false, breaking: 0 };
   }
 
   function spawnKid(i, floor, x, y) {
@@ -189,8 +190,8 @@ var World = (function () {
     var list = G.walls.slice();
     /* 关着的楼梯间门 */
     var dA = W.stairDoors[floor].A, dB = W.stairDoors[floor].B;
-    if (dA.amt < 0.55) list.push(G.stairDoorA.rect);
-    if (dB.amt < 0.55) list.push(G.stairDoorB.rect);
+    if (!dA.broken && !dA.open && dA.amt < 0.55) list.push(G.stairDoorA.rect);
+    if (!dB.broken && !dB.open && dB.amt < 0.55) list.push(G.stairDoorB.rect);
     /* 关着的电梯门 */
     for (var i = 0; i < W.elevators.length; i++) {
       var e = W.elevators[i];
@@ -322,6 +323,89 @@ var World = (function () {
       addEvent("电梯自己叮了一声", "sys", W.player ? W.player.floor : null);
     }
     return k;
+  }
+
+  /** 当前所有可交互对象（供画面上飘出图标） */
+  function prompts() {
+    var out = [];
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor") return out;
+
+    /* 配电箱 */
+    for (var i = 0; i < W.fuses.length; i++) {
+      var f = W.fuses[i];
+      if (f.done || f.floor !== p.floor) continue;
+      var fd = dist(p.x, p.y, f.x, f.y);
+      if (fd > 2.2) continue;
+      out.push({
+        kind: "fuse", id: "f" + i, icon: "bolt", label: "破译配电箱",
+        x: f.x, y: f.y - 0.55, near: fd <= ((Cfg.OBJ && Cfg.OBJ.touchDist) || 1.0),
+        progress: f.prog || 0, active: !!(W.repair && W.repair.index === i)
+      });
+    }
+
+    /* 1F 紧急按钮 */
+    if (allFusesDone()) {
+      var ex = G.hallCX - 1.6, ey = G.hallY0 + 0.55;
+      if (p.floor === 1 && dist(p.x, p.y, ex, ey) < 2.2) {
+        out.push({
+          kind: "exit", id: "exit", icon: "exit", label: "紧急出门",
+          x: ex, y: ey - 0.6, near: dist(p.x, p.y, ex, ey) < 1.15, progress: 0, active: false
+        });
+      }
+    }
+
+    /* 楼梯间门（板子） */
+    for (var k = 0; k < 2; k++) {
+      var L = k === 0 ? "A" : "B";
+      var dr = doorRect(p.floor, L);
+      var cx = dr.x + dr.w / 2, cy = dr.y + dr.h / 2;
+      var dd = dist(p.x, p.y, cx, cy);
+      if (dd > 2.0) continue;
+      var st = W.stairDoors[p.floor][L];
+      if (st.broken) continue;
+      out.push({
+        kind: "door", id: L, icon: "door",
+        label: st.open ? "拉上门（挡住它）" : "开门",
+        x: cx, y: dr.y - 0.45, near: dd <= 1.35,
+        progress: st.breaking || 0, active: false, breaking: st.breaking || 0
+      });
+    }
+    return out;
+  }
+
+  /** 点图标：按 kind 执行 */
+  function promptAction(kind, id) {
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor") return false;
+    if (kind === "fuse") {
+      var idx = parseInt(String(id).slice(1), 10);
+      var f = W.fuses[idx];
+      if (!f || f.done || f.floor !== p.floor) return false;
+      if (dist(p.x, p.y, f.x, f.y) > ((Cfg.OBJ && Cfg.OBJ.touchDist) || 1.0)) {
+        if (window.UI) UI.toast("走近一点再修");
+        return false;
+      }
+      if (!W.repair || W.repair.index !== idx) {
+        W.repair = { index: idx, t: f.prog * ((Cfg.OBJ && Cfg.OBJ.repairSec) || 6), noiseT: 0 };
+        if (window.Audio2) Audio2.repair(true);
+      }
+      return true;
+    }
+    if (kind === "exit") {
+      if (!allFusesDone() || !nearExit()) return false;
+      W.escaped = true;
+      endRound("escape");
+      return true;
+    }
+    if (kind === "door") {
+      var L2 = id === "B" ? "B" : "A";
+      var dr2 = doorRect(p.floor, L2);
+      if (dist(p.x, p.y, dr2.x + dr2.w / 2, dr2.y + dr2.h / 2) > 1.35) return false;
+      playerToggleDoor();
+      return true;
+    }
+    return false;
   }
 
   /** 每帧推进修理 */
@@ -762,18 +846,43 @@ var World = (function () {
     }
   }
 
+  /** 它开始/继续破门；返回 true 表示这一下把门破了 */
+  function breakDoor(killer, floor, landing, dt) {
+    var d = W.stairDoors[floor][landing];
+    if (!d || d.open || d.broken) { if (d) { d.breaking = 0; d.breakingBy = null; } return false; }
+    d.breakingBy = killer ? killer.id : "x";
+    d.breaking += dt / (Cfg.DOOR.breakSec || 2.4);
+    if (Math.random() < dt * 4) emitNoise(floor, doorRect(floor, landing).x, doorRect(floor, landing).y, Cfg.DOOR.breakNoise || 10, "break");
+    if (d.breaking >= 1) {
+      d.broken = true;
+      d.breaking = 0;
+      d.breakingBy = null;
+      d.open = true;
+      d.amt = 1;
+      emitNoise(floor, doorRect(floor, landing).x, doorRect(floor, landing).y, (Cfg.DOOR.breakNoise || 10) + 4, "break");
+      if (window.Audio2) Audio2.door(false);
+      addEvent("门被它砸开了（" + floor + "F " + (landing === "A" ? "西" : "东") + "侧楼梯间）", "sys", floor);
+    }
+    return d.broken;
+  }
+
   /** 走到楼梯门前就顺手推开（寻路全程都用） */
   function autoOpenDoor(a) {
     if (!a || !a.alive || a.space !== "floor") return;
+    /* 玩家不自动开门：门就是"板子"，开不开由他自己按图标决定 */
+    if (a.controlled) return;
+    /* 杀人犯不会"推开"门 —— 它只会砸门（走 AI 的 breakDoor） */
+    if (a.kind === "killer") return;
     for (var i = 0; i < 2; i++) {
       var L = i === 0 ? "A" : "B";
       var dr = doorRect(a.floor, L);
       var cx = dr.x + dr.w / 2, cy = dr.y + dr.h / 2;
       if (dist(a.x, a.y, cx, cy) > 1.25) continue;
       var d = W.stairDoors[a.floor][L];
-      if (d.open) continue;
+      if (d.open || d.broken) continue;
       d.open = true;
-      d.closeTimer = 0;
+      d.breaking = 0;
+      d.breakingBy = null;
       emitNoise(a.floor, cx, cy, Cfg.DOOR.noise, "door");
       if (window.Audio2 && a.controlled) Audio2.door(true);
       if (a.controlled) addEvent("你推开了楼梯间的门", "you", a.floor);
@@ -822,12 +931,17 @@ var World = (function () {
       for (var i = 0; i < 2; i++) {
         var L = i === 0 ? "A" : "B";
         var d = W.stairDoors[f][L];
+        if (d.broken) {
+          d.amt = 1;
+          d.breaking = 0;
+          continue;
+        }
         if (d.open) {
           d.amt = Math.min(1, d.amt + dt / Cfg.DOOR.openSec);
-          d.closeTimer = (d.closeTimer || 0) + dt;
-          if (d.closeTimer > Cfg.STAIR.doorAutoClose) { d.open = false; d.closeTimer = 0; }
         } else {
           d.amt = Math.max(0, d.amt - dt / Cfg.DOOR.closeSec);
+          /* 没人在破门就慢慢回落，避免读条卡住 */
+          if (!d.breakingBy) d.breaking = Math.max(0, d.breaking - dt * 0.6);
         }
       }
     }
@@ -1060,9 +1174,11 @@ var World = (function () {
       var cx = dr.x + dr.w / 2, cy = dr.y + dr.h / 2;
       if (dist(p.x, p.y, cx, cy) < 1.35) {
         var d = W.stairDoors[f][L];
+        if (d.broken) return;
         d.open = !d.open;
-        d.closeTimer = 0;
-        emitNoise(f, cx, cy, Cfg.DOOR.noise, "door");
+        d.breaking = 0;
+        d.breakingBy = null;
+        emitNoise(f, cx, cy, Cfg.DOOR.noise, d.open ? "door" : "slam");
         if (window.Audio2) Audio2.door(d.open);
         if (p.controlled) addEvent(d.open ? "你推开了楼梯间的门" : "你带上了楼梯间的门", "you", f);
         return;
@@ -1226,6 +1342,7 @@ var World = (function () {
     nearFuse: nearFuse,
     nearExit: nearExit,
     playerUse: playerUse, boardOpenCar: boardOpenCar,
+    prompts: prompts, promptAction: promptAction, breakDoor: breakDoor,
     panelVisible: panelVisible, canCall: canCall,
     get events() { return W.events; },
     get noises() { return W.noises; },
