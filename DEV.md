@@ -150,6 +150,25 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
+## 1.05 威胁曲线与「没有倒计时」（v2.1）
+
+```js
+THREAT: { base: 1.0, perFuse: 0.05, perMinute: 0.02, max: 1.25 }
+ROUND_SEC: 0   // 0 = 不限时；>0 才启用硬性时限（endRound('time')）
+```
+
+- `world.threat` 每帧重算，`ai.js` 里追击/巡逻速度都乘它。
+- 1.25 倍时追击速度约 3.8 m/s，玩家冲刺 3.30 —— 后期**跑不掉**，只能靠楼梯/电梯/门甩开，这是有意的。
+- HUD 的 `#clock` 现在显示已用时间 + 威胁等级（`ui.js` 的 `el.clock.innerHTML`）。
+
+## 1.06 轿厢内交互（v2.1 修过的坑）
+
+- **点哪走哪**：`render.js` 的 `carBox()/carToWorld()` 把屏幕坐标换算成轿厢内世界坐标，`main.js` 的 `onStageClick` 里直接 `setWalk([点])`。
+- 删除旧逻辑：以前点画面下半 28% 会 `playerExitCar()`，和「点着移动」直接冲突。
+- `playerExitCar` 现在三态：门开 → 直接出；门关且停稳 → `pendingExit` + 开门，开门后自动送出去；还在跑 → `pendingExit`，到站开门自动出。
+- `world.boardOpenCar()`：门开着 + 站得近，按 `用` 直接进轿厢（比点轿厢更直觉）。
+- 门口感应：`case "open"` 里如果玩家在门口 2.6 m 内，`e.timer` 会被续到 0.75×hold，避免被夹。
+
 ## 1.1 目标制玩法（v2.0）
 
 ### 一局的流程

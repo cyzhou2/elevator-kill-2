@@ -62,7 +62,7 @@ var World = (function () {
     W.tension = 0; W.heartbeat = 0; W.lastSeenKiller = null;
 
     W.hallUp = []; W.hallDown = []; W.stairDoors = [];
-    W.fuses = []; W.power = []; W.repair = null; W.lives = (cfg.PLAYER && cfg.PLAYER.lives) || 2; W.escaped = false;
+    W.threat = 1; W.fuses = []; W.power = []; W.repair = null; W.lives = (cfg.PLAYER && cfg.PLAYER.lives) || 2; W.escaped = false;
     for (var pf0 = 0; pf0 <= cfg.FLOORS; pf0++) W.power[pf0] = false;
     for (var f = 0; f <= cfg.FLOORS; f++) {
       W.hallUp[f] = false;
@@ -639,6 +639,21 @@ var World = (function () {
 
       case "open":
         e.openAmt = 1;
+        /* 有人站在门口/大厅里朝电梯走 → 门保持打开 */
+        if (W.player && W.player.space === "floor" && W.player.alive &&
+            Math.abs(e.floor - Math.round(e.floor)) < 0.06 &&
+            Math.abs(W.player.floor - Math.round(e.floor)) < 0.5 &&
+            dist(W.player.x, W.player.y, e.cx, G.hallY0 + 0.4) < 2.6) {
+          e.timer = Math.max(e.timer, Cfg.ELEV.doorHoldSec * 0.75);
+        }
+        /* 有人按了"出"但当时门是关的 —— 现在门开了，替他出去 */
+        for (var pi = 0; pi < W.actors.length; pi++) {
+          var pa = W.actors[pi];
+          if (pa.space === "car" && pa.carId === e.id && pa.pendingExit) {
+            pa.pendingExit = false;
+            exitCarToHall(pa);
+          }
+        }
         e.timer -= dt;
         if (e.timer <= 0) { e.state = "closing"; e.timer = Cfg.ELEV.doorCloseSec; }
         break;
@@ -848,8 +863,12 @@ var World = (function () {
     /* 紧张度 & 心跳 */
     updateTension(dt);
 
-    /* 时间到 */
-    if (W.time >= Cfg.ROUND_SEC) endRound("time");
+    /* 威胁值：修得越多、拖得越久，它越快 */
+    var TH = Cfg.THREAT || { base: 1, perFuse: 0.06, perMinute: 0.03, max: 1.45 };
+    W.threat = Math.min(TH.max, TH.base + fusesDone() * TH.perFuse + (W.time / 60) * TH.perMinute);
+
+    /* 硬性时限（默认关闭） */
+    if (Cfg.ROUND_SEC > 0 && W.time >= Cfg.ROUND_SEC) endRound("time");
   }
 
   function updateTension(dt) {
@@ -931,7 +950,7 @@ var World = (function () {
     W.running = false;
     W.reason = reason;
     if (reason === "escape") {
-      W.score = Math.round(1200 + (Cfg.ROUND_SEC - W.time) * 4 + fusesDone() * 150);
+      W.score = Math.round(1200 + Math.max(0, 600 - W.time) * 3 + fusesDone() * 150);
       addEvent("你按下了紧急按钮 —— 门开了", "obj", 1);
       return;
     }
@@ -1069,10 +1088,43 @@ var World = (function () {
     var p = W.player;
     if (!p || p.space !== "car") return false;
     var e = carById(p.carId);
-    if (!e || !e.doorsOpen) return false;
+    if (!e) return false;
+    if (!e.doorsOpen) {
+      var at = Math.round(e.floor);
+      /* 还在跑：记下"到站就出去"，到站开门时自动送你出门 */
+      if (Math.abs(e.floor - at) > 0.06) {
+        if (!p.pendingExit) {
+          p.pendingExit = true;
+          if (window.UI) UI.toast("到站会开门，然后自动出去");
+          if (p.controlled) addEvent("你要出门 —— 到站后自动开门", "sys", p.floor);
+        }
+        return true;
+      }
+      /* 停稳了但门关着：先开门，开门后自动出去 */
+      p.pendingExit = true;
+      if (e.state !== "opening" && e.state !== "open") openDoors(e, at, e.dir);
+      if (window.UI) UI.toast("正在开门…");
+      return true;
+    }
+    p.pendingExit = false;
     exitCarToHall(p);
     W.floor = p.floor;
     return true;
+  }
+
+  /** 门开着、站在电梯口 → 按"用"直接进轿厢 */
+  function boardOpenCar() {
+    var p = W.player;
+    if (!p || !p.alive || p.space !== "floor") return false;
+    for (var i = 0; i < W.elevators.length; i++) {
+      var e = W.elevators[i];
+      if (!carOpenAt(e, p.floor)) continue;
+      if (dist(p.x, p.y, e.cx, G.hallY0 + 0.35) < 1.5) {
+        boardCar(p, e);
+        return true;
+      }
+    }
+    return false;
   }
 
   function nearDoor() {
@@ -1119,11 +1171,12 @@ var World = (function () {
     get fuseTotal() { return W.fuses.length; },
     allFusesDone: allFusesDone,
     get lives() { return W.lives; },
+    get threat() { return W.threat || 1; },
     get repair() { return W.repair; },
     get power() { return W.power; },
     nearFuse: nearFuse,
     nearExit: nearExit,
-    playerUse: playerUse,
+    playerUse: playerUse, boardOpenCar: boardOpenCar,
     panelVisible: panelVisible, canCall: canCall,
     get events() { return W.events; },
     get noises() { return W.noises; },

@@ -458,3 +458,13 @@ body.inCar #joy { display: none; }
   #objCount { font-size: 15px; }
   #repairBar { bottom: calc(var(--ctl) + 148px); width: 180px; }
 }
+
+
+/* ---------- 威胁等级 ---------- */
+#clock .threat {
+  margin-left: 8px; font-size: 10px; letter-spacing: 2px;
+  color: #7d8a86; vertical-align: middle;
+  font-variant-numeric: normal;
+}
+#clock.hot .threat { color: #d0655a; }
+#clock.hot { text-shadow: 0 0 12px rgba(180, 60, 50, .35); }

@@ -90,7 +90,13 @@ var UI = (function () {
     var W = world;
     if (!W.player) return;
 
-    if (el.clock) el.clock.textContent = fmtTime(CFG.ROUND_SEC - Math.min(W.time, CFG.ROUND_SEC));
+    if (el.clock) {
+      /* 不限时：显示已经撑了多久 + 威胁等级 */
+      var th = W.threat || 1;
+      var lv = th >= 1.3 ? "III" : th >= 1.15 ? "II" : "I";
+      el.clock.innerHTML = fmtTime(W.time) + '<span class="threat">威胁 ' + lv + "</span>";
+      el.clock.classList.toggle("hot", th >= 1.15);
+    }
     if (el.aliveNo) el.aliveNo.textContent = W.countAliveKids();
 
     /* 楼层：在轿厢里显示车所在层 */

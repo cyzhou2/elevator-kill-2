@@ -340,7 +340,8 @@ var AI = (function () {
       }
     }
     if (!a.target || a.target.floor !== a.floor) return;
-    var speed = a.state === "chase" ? C.KILLER.chase : C.KILLER.patrol;
+    var th = w.threat || 1;
+    var speed = (a.state === "chase" ? C.KILLER.chase : C.KILLER.patrol) * th;
     var done = false;
     if (w.navGo) done = w.navGo(a, a.target.x, a.target.y, dt, speed);
     else {

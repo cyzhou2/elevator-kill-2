@@ -57,7 +57,8 @@
       if (p.space === "car") { World.playerToggleCarDoor(true); return; }
       if (inStairZone) { World.playerTryStairs(1); return; }          // E = 上楼
       if (World.nearDoor()) { World.playerToggleDoor(); return; }
-      if (World.playerUse && World.playerUse()) return;      // 修配电箱 / 按紧急按钮
+      if (World.boardOpenCar && World.boardOpenCar()) return;  // 门开着就进梯
+      if (World.playerUse && World.playerUse()) return;        // 修配电箱 / 按紧急按钮
       if (world.panelVisible()) World.playerCallElevator(1);
       return;
     }
@@ -106,10 +107,10 @@
   function onStageClick(raw, pt) {
     var p = world.player;
     if (!p || !p.alive || over) return;
-    /* 轿厢场景：点下半部分 = 走到门口出去 */
+    /* 轿厢场景：点轿厢内部 = 走过去（手机靠这个移动） */
     if (p.space === "car") {
-      var box = $("#stage").getBoundingClientRect();
-      if (raw.y > box.height * 0.72) World.playerExitCar();
+      var cw = Render.carToWorld(raw.x, raw.y);
+      if (cw) setWalk([cw]);
       return;
     }
     handleClick(pt);

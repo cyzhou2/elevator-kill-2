@@ -575,6 +575,33 @@ var Render = (function () {
   }
 
   /* ---------- 轿厢内近景 ---------- */
+  /* 轿厢画面的方框（绘制/点击共用） */
+  function carBox(w, h) {
+    var compact = w < 700;
+    var panelW = compact ? (w < 460 ? 168 : 190) : 0;
+    var availW = w - panelW - 24;
+    var bw = Math.min(compact ? availW : w * 0.56, 620);
+    var bh = Math.min(h - 24, bw * 1.02);
+    return { x: compact ? 12 : w * 0.5 - bw * 0.62, y: h * 0.5 - bh * 0.5, w: bw, h: bh, compact: compact, panelW: panelW };
+  }
+
+  /** 屏幕坐标 → 轿厢内的世界坐标（轿厢矩形 1.7×1.6 m） */
+  function carToWorld(px, py) {
+    var p = World.player;
+    if (!p || p.space !== "car") return null;
+    var e = World.carById(p.carId);
+    if (!e) return null;
+    var g = World.geom;
+    var car = e.id === "C" ? g.elev.C.car : g.elev.D.car;
+    var box = carBox(W, H);
+    if (px < box.x - 10 || px > box.x + box.w + 10 || py < box.y - 10 || py > box.y + box.h + 10) return null;
+    var tx = (px - box.x) / box.w, ty = (py - box.y) / box.h;
+    return {
+      x: car.x + Math.max(0.08, Math.min(1, tx)) * car.w,
+      y: car.y + Math.max(0.08, Math.min(1, ty)) * car.h
+    };
+  }
+
   function drawCarScene(world) {
     var p = world.player;
     var e = p && p.space === "car" ? world.carById(p.carId) : null;
@@ -582,14 +609,8 @@ var Render = (function () {
     ctx.fillStyle = "#0b0d0e";
     ctx.fillRect(0, 0, W, H);
 
-    /* 窄屏时右侧是楼层面板，轿厢画面只占左边，避免被面板压住 */
-    var compact = W < 700;
-    var panelW = compact ? (W < 460 ? 168 : 190) : 0;
-    var availW = W - panelW - 24;
-    var boxW = Math.min(compact ? availW : W * 0.56, 620);
-    var boxH = Math.min(H - 24, boxW * 1.02);
-    var x0 = compact ? 12 : W * 0.5 - boxW * 0.62;
-    var y0 = H * 0.5 - boxH * 0.5;
+    var box = carBox(W, H);
+    var boxW = box.w, boxH = box.h, x0 = box.x, y0 = box.y;
     var x1 = x0 + boxW, y1 = y0 + boxH;
 
     /* 轿厢地板 */
@@ -1150,6 +1171,7 @@ var Render = (function () {
     draw: draw,
     bake: bake,
     toWorld: toWorld,
+    carToWorld: carToWorld, carBox: carBox,
     w2s: w2s,
     get view() { return view; },
     get size() { return { W: W, H: H }; }
