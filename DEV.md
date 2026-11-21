@@ -192,6 +192,7 @@ PLAYER: { lives: 2, hurtSec: 12, hurtSpeed: 0.86, invulnSec: 3 }
 
 - 想更简单：`OBJ.noiseRadius` 降到 8，或 `repairSec` 降到 4，或 `PLAYER.lives` 改 3。
 - 想更凶：`OBJ.noiseRadius` 拉到 16、`noiseEvery` 降到 0.5；或 `OBJ.fuses` 改成 4~5。
+- 结构传声（上下两层能听到修理声）的概率写死在 `world.js` 的 `emitNoise`（现在是 0.5，`gapF <= 2`）；想更狠就把 `gapF <= 3`、概率 0.75。
 - 注意：`fuses` 超过 5 时 5 分钟会不够，把 `ROUND_SEC` 一起调。
 
 ## 1.2 AI 现状（v1.7）

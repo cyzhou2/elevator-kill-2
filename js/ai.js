@@ -146,6 +146,15 @@ var AI = (function () {
     }
     if (a.space !== "floor") return;
 
+    /* 修理声（结构噪音）优先级高于"本来要去的那层"，但低于正在追人 */
+    if (a.state !== "chase" && a.heard && a.heard.kind === "muffled" &&
+        a.heard.floor != null && a.heard.floor !== a.floor &&
+        now - a.heard.t < 4) {
+      if (!a.travel || a.travel.floor !== a.heard.floor) setTravel(w, a, a.heard.floor);
+      travelStep(w, a, dt);
+      return;
+    }
+
     if (a.travel) { travelStep(w, a, dt); return; }
 
     a.aiTimer -= dt;

@@ -360,7 +360,22 @@ var World = (function () {
     W.noises.push({ floor: floor, x: x, y: y, r: radius, kind: kind, t: W.time });
     for (var i = 0; i < W.actors.length; i++) {
       var a = W.actors[i];
-      if (a.kind !== "killer" || !a.alive || a.floor !== floor) continue;
+      if (a.kind !== "killer" || !a.alive) continue;
+
+      /* 修理/通电是"结构噪音"：会顺着管井传到上下两层（有一定概率），
+         传过去的位置是模糊的 —— 它只知道"那层有人在动"，不知道具体哪个门牌 */
+      if (kind === "repair" || kind === "power") {
+        var gapF = Math.abs(a.floor - floor);
+        if (gapF > 0 && gapF <= 2 && Math.random() < 0.5) {
+          a.heard = {
+            x: x + rnd(-2.2, 2.2), y: clamp(y + rnd(-1.2, 1.2), 0.6, G.corridor.h - 0.5),
+            floor: floor, t: W.time, kind: "muffled"
+          };
+          continue;
+        }
+      }
+
+      if (a.floor !== floor) continue;
       if (dist(a.x, a.y, x, y) <= radius) {
         a.heard = { x: x, y: y, floor: floor, t: W.time, kind: kind };
       }
