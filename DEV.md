@@ -150,6 +150,29 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
+## 0.6 电梯进主场景 / 楼梯改版 / 键位（v2.9）
+
+### 轿厢渲染
+
+- `layout()` 里 `inCar` 仍把镜头框到轿厢，但 `draw()` **不再切 `drawCarScene`**。
+- 新增 `drawCabinInScene(world)`：轿厢地面 + 内墙 + 顶灯 + 门缝光；`openAmt < 0.12` 时用 `fill('evenodd')` 把轿厢外刷黑。
+- 顺序：地板/电梯 → drawCabinInScene → drawActors → drawPrompts（保证轿厢里的人画在黑暗之上）。
+- 旧 `drawCarScene` 保留在文件里但不再调用。
+
+### 键位与楼梯
+
+- `input.js`：`KeyQ → interactUp`，`KeyE → interact`；`main.doAction` 里楼梯间 `interact` = 下楼、`interactUp` = 上楼；`space==='stair'` 时只处理换方向。
+- `world.reverseStairs(a, wantDir)`：`t = (1-progress)*dur`，改 `to`；已在目标方向直接返回 true。
+- 楼梯抓人：抓人循环里两个 actor 都在 `space==='stair'`、`from/to` 相同、进度差 < 0.22 → 进读条。
+- 追进楼梯：`stepKiller` 的 chase 分支把 `target.floor` 设成 `kid.stair.to` 并 `setTravel`。
+- 楼梯速度：`KILLER.stairSpeedMul = 0.72` 乘在 `STAIR.traverseSec` 上。
+
+## 0.65 队友 AI：只收尾、不开箱（v2.8）
+
+- `world.kidRepair(w, kid, dt)`：`ai.js` 的 `kidUpdate` 在躲避/换层之前调用。
+- 三条限制：只接手 `prog > 0.02` 的箱子、最多 `KID.repairers` 人同时修、本层有杀人犯就放弃。
+- `completeFuse(f, who)` 玩家和小孩共用；玩家进度改成**累加**，两边可以接力同一个箱子。
+
 ## 0.7 双出口 / 更强的 AI / 纯点击（v2.7）
 
 ### 双出口
