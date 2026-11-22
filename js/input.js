@@ -34,7 +34,7 @@ var Input = (function () {
       keys[e.code] = true;
       switch (e.code) {
         case "KeyE": push("interact"); e.preventDefault(); break;
-        case "KeyQ": push("interactDown"); e.preventDefault(); break;
+        case "KeyQ": push("interactUp"); e.preventDefault(); break;
         case "Space": push("space"); e.preventDefault(); break;
         case "Escape": push("pause"); break;
         case "KeyM": push("mute"); break;

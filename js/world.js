@@ -688,11 +688,34 @@ var World = (function () {
     var nf = a.floor + dir;
     if (nf < 1 || nf > Cfg.FLOORS) return false;
     a.space = "stair";
-    a.stair = { from: a.floor, to: nf, fromLanding: landing, toLanding: otherLanding(landing), dir: dir, t: 0, dur: Cfg.STAIR.traverseSec };
+    var durS = Cfg.STAIR.traverseSec;
+    if (a.kind === "killer") durS *= (Cfg.KILLER.stairSpeedMul || 0.75);      /* 它在楼梯上更凶 */
+    else if (a.kind === "kid") durS *= 1.05;
+    a.stair = { from: a.floor, to: nf, fromLanding: landing, toLanding: otherLanding(landing), dir: dir, t: 0, dur: durS };
     a.x = landing === "A" ? G.stairZoneA.x + G.stairZoneA.w / 2 : G.stairZoneB.x + G.stairZoneB.w / 2;
     a.y = G.stairZoneA.y + 0.4;
     emitNoise(a.floor, a.x, a.y, 4.5, "stair");
     if (a.controlled) addEvent("你从楼梯" + (dir > 0 ? "上" : "下") + "到 " + nf + "F", "you", nf);
+    return true;
+  }
+
+  /** 楼梯走到一半想换个方向：镜像进度，改终点 */
+  function reverseStairs(a, wantDir) {
+    if (!a || a.space !== "stair" || !a.stair) return false;
+    var s = a.stair;
+    if (wantDir && s.dir === wantDir) return true;   /* 已经在往那边走 */
+    var ndir = s.dir > 0 ? -1 : 1;
+    var nf = s.from + ndir;
+    if (nf < 1 || nf > Cfg.FLOORS) return false;
+    var prog = s.t / s.dur;
+    s.to = nf;
+    s.dir = ndir;
+    s.toLanding = otherLanding(s.fromLanding);
+    s.t = (1 - prog) * s.dur;
+    if (a.controlled) {
+      addEvent("你在楼梯上掉头，" + (ndir > 0 ? "往上" : "往下") + "去 " + nf + "F", "you", nf);
+      if (window.Audio2) Audio2.footstep(false, true);
+    }
     return true;
   }
 
@@ -1106,6 +1129,23 @@ var World = (function () {
       if (ki.kind !== "killer" || !ki.alive) continue;
       ki.catching = null;
       if (ki.recoverT > 0) continue;         /* 擦刀中：抓不到人 */
+
+      /* 楼梯上：走同一段楼梯、进度接近 → 撞上了 */
+      if (ki.space === "stair" && ki.stair) {
+        for (var sq = 0; sq < W.actors.length; sq++) {
+          var sk2 = W.actors[sq];
+          if (sk2.kind !== "kid" || !sk2.alive || sk2.space !== "stair" || !sk2.stair) continue;
+          if (sk2.stair.from !== ki.stair.from || sk2.stair.to !== ki.stair.to) continue;
+          if (sk2.invuln > 0) continue;
+          if (Math.abs((sk2.stair.t / sk2.stair.dur) - (ki.stair.t / ki.stair.dur)) < 0.22) {
+            ki.catching = sk2;
+            sk2.heldBy = ki;
+            sk2.grip = (sk2.grip || 0) + dt;
+            if (sk2.grip >= Cfg.KILLER.catchTime) catchKid(sk2, ki);
+          }
+        }
+        continue;
+      }
       for (var q = 0; q < W.actors.length; q++) {
         var kd = W.actors[q];
         if (kd.kind !== "kid" || !kd.alive) continue;
@@ -1191,6 +1231,7 @@ var World = (function () {
     }
   }
 
+  /* 在楼梯上被抓：直接结算 */
   function catchKid(kid, killer) {
     /* 玩家有两条命：第一次被抓只是受伤，被打退、短暂无敌，杀人犯会被甩开 */
     if (kid.controlled && W.lives > 1) {
@@ -1508,7 +1549,7 @@ var World = (function () {
     doorRect: doorRect, doorOpenAmt: doorOpenAmt,
     addEvent: addEvent, emitNoise: emitNoise,
     boardCar: boardCar, exitCarToHall: exitCarToHall,
-    startStairs: startStairs, otherLanding: otherLanding,
+    startStairs: startStairs, otherLanding: otherLanding, reverseStairs: reverseStairs,
     countAliveKids: countAliveKids, countAliveKillers: countAliveKillers,
     endRound: endRound, catchKid: catchKid,
     playerMoveAxis: playerMoveAxis, playerTryStairs: playerTryStairs,

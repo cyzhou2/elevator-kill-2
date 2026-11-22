@@ -241,7 +241,7 @@ var UI = (function () {
     }
     if (W.nearFuse && W.nearFuse()) return "点 <b>⚡ 图标</b> 或按 <b>E</b> 破译配电箱 · 声音会招来它";
     var g = W.geom;
-    if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>E</b> 上楼 · <b>Q</b> 下楼";
+    if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>Q</b> 上楼 · <b>E</b> 下楼（楼梯上一半也能掉头）";
     if (W.nearDoor && W.nearDoor()) {
       var L = W.nearDoor();
       var d = W.state.stairDoors[p.floor][L];
@@ -250,7 +250,7 @@ var UI = (function () {
     if (Geom.inRect(g.hall, p.x, p.y, -0.05)) {
       var open = W.elevAt(p.floor).filter(function (e) { return e.doorsOpen; });
       if (open.length) return "门开着 · 走进轿厢";
-      return "点面板 ▲/▼ 呼梯 · <b>E</b> 上 / <b>Q</b> 下";
+      return "点面板 ▲/▼ 呼梯 · <b>Q</b> 上 / <b>E</b> 下";
     }
     return "";
   }

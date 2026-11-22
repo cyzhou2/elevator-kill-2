@@ -49,18 +49,30 @@
   function doAction(a) {
     var p = world.player;
     if (!p || !p.alive || over) return;
-    if (p.space === "stair") return;
+
+    /* 正在走楼梯：只响应"换方向" */
+    if (p.space === "stair") {
+      if (a === "interact" || a === "interactUp" || a === "interactDown" || a === "stairUp" || a === "stairDown") {
+        var want = (a === "interactUp" || a === "stairUp") ? 1 : -1;
+        World.reverseStairs(p, want);
+      }
+      return;
+    }
 
     var inStairZone = p.space === "floor" && World.nearStairs();
 
     if (a === "interact") {
       if (p.space === "car") { World.playerToggleCarDoor(true); return; }
-      if (inStairZone) { World.playerTryStairs(1); return; }          // E = 上楼
+      if (inStairZone) { World.playerTryStairs(-1); return; }         // E = 下楼（和"下"按钮对应）
       if (World.nearDoor()) { World.playerToggleDoor(); return; }
       if (World.boardOpenCar && World.boardOpenCar()) return;  // 门开着就进梯
       /* E / 用 也能破译配电箱、按紧急按钮（和点图标等价） */
       if (World.playerUse && World.playerUse()) return;
       if (world.panelVisible()) World.playerCallElevator(1);
+      return;
+    }
+    if (a === "interactUp") {
+      if (p.space === "floor" && World.nearStairs()) { World.playerTryStairs(1); return; }   // Q = 上楼
       return;
     }
     if (a === "interactDown") {

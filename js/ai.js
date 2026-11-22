@@ -216,6 +216,9 @@ var AI = (function () {
     }
     if (a.space !== "floor") return;
 
+    /* 楼梯口的"追踪强化"：它刚看到有人进了楼梯间，就会咬住不放 */
+    if (a.stairStalk && now - a.stairStalk.t > 9) a.stairStalk = null;
+
     /* 每帧感知：有人在旁边/视线里，优先于一切（包括"要去别的楼层"） */
     var det = detectKid(w, a);
     if (det) {
@@ -225,6 +228,9 @@ var AI = (function () {
       }
       if (det.kind === "sight") {
         a.senseId = null;
+        if (w.nearStairs && w.nearStairs()) {
+          a.stairStalk = { floor: det.kid.floor, t: now, kid: det.kid.id };
+        }
         startChase(w, a, det.kid, now);
         stepKiller(w, a, dt);
         return;
@@ -495,6 +501,12 @@ var AI = (function () {
       for (var ci = 0; ci < w.state.actors.length; ci++) {
         var ck = w.state.actors[ci];
         if (ck.id !== a.chaseKid) continue;
+        /* 它进了楼梯间：追到楼梯另一头，别想用几级台阶甩掉 */
+        if (ck.alive && ck.space === "stair" && ck.stair) {
+          a.target = { x: ck.x, y: ck.y, floor: ck.stair.to };
+          if (a.floor !== ck.stair.to && !a.travel) setTravel(w, a, ck.stair.to);
+          break;
+        }
         if (!ck.alive || ck.space !== "floor" || ck.floor !== a.floor) { a.chaseKid = null; break; }
         a.target = { x: ck.x, y: ck.y, floor: ck.floor };
         break;

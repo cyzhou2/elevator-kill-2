@@ -485,13 +485,66 @@ var Render = (function () {
     c.globalCompositeOperation = "source-over";
   }
 
+  /* ---------- 轿厢（在主场景里直接画） ---------- */
+  function drawCabinInScene(world) {
+    var p = world.player;
+    if (!p || p.space !== "car") return;
+    var e = World.carById(p.carId);
+    if (!e) return;
+    var g = world.geom;
+    var car = e.id === "D" ? g.elev.D.car : g.elev.C.car;
+    var open = e.openAmt || 0;
+
+    /* 门关着：外面彻底看不见 */
+    if (open < 0.12) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(car.x - 40, car.y - 40, car.w + 80, car.h + 80);
+      ctx.rect(car.x, car.y, car.w, car.h);
+      ctx.fillStyle = "rgba(1,2,2,0.995)";
+      ctx.fill("evenodd");
+      ctx.restore();
+    }
+
+    ctx.save();
+    /* 轿厢地面 */
+    ctx.fillStyle = "#23282a";
+    ctx.fillRect(car.x, car.y, car.w, car.h);
+    /* 地砖 */
+    ctx.strokeStyle = "rgba(70,80,80,0.35)";
+    ctx.lineWidth = 0.02;
+    for (var ix = 1; ix < 3; ix++) {
+      ctx.beginPath(); ctx.moveTo(car.x + (car.w / 3) * ix, car.y); ctx.lineTo(car.x + (car.w / 3) * ix, car.y + car.h); ctx.stroke();
+    }
+    for (var iy = 1; iy < 3; iy++) {
+      ctx.beginPath(); ctx.moveTo(car.x, car.y + (car.h / 3) * iy); ctx.lineTo(car.x + car.w, car.y + (car.h / 3) * iy); ctx.stroke();
+    }
+    /* 内墙 */
+    ctx.strokeStyle = "#3d4749";
+    ctx.lineWidth = 0.09;
+    ctx.strokeRect(car.x + 0.045, car.y + 0.045, car.w - 0.09, car.h - 0.09);
+    /* 顶灯（门关着时更亮一点，因为全暗里就它能照） */
+    var lf = 0.5 + Math.sin(time * 2.2) * 0.05 + (open < 0.12 ? 0.28 : 0);
+    var lg = ctx.createRadialGradient(car.x + car.w / 2, car.y + car.h / 2, 0.05,
+      car.x + car.w / 2, car.y + car.h / 2, Math.max(car.w, car.h) * 0.8);
+    lg.addColorStop(0, "rgba(214,222,208," + (0.16 * lf).toFixed(3) + ")");
+    lg.addColorStop(1, "rgba(214,222,208,0)");
+    ctx.fillStyle = lg;
+    ctx.fillRect(car.x, car.y, car.w, car.h);
+    /* 门外的一线光 */
+    if (open > 0.12) {
+      ctx.fillStyle = "rgba(200,210,195," + (0.12 * open).toFixed(3) + ")";
+      ctx.fillRect(car.x + car.w * 0.12, car.y + car.h - 0.05, car.w * 0.76, 0.1);
+    }
+    ctx.restore();
+  }
+
   /* ---------- 主绘制 ---------- */
 
   function draw(world, dt) {
     if (!baked || baked.__geom !== world.geom) { bake(); baked.__geom = world.geom; layout(); }
     time += dt || 0.016;
 
-    if (view.inCar) { drawCarScene(world); return; }
     if (world.player && world.player.space === "stair") { drawStairScene(world); return; }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -534,6 +587,7 @@ var Render = (function () {
     drawObjectives(world);
 
     /* 5. 角色（只画看得见的） */
+    drawCabinInScene(world);
     drawActors(world);
     drawPrompts(world);
 
