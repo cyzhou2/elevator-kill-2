@@ -35,6 +35,14 @@ var AI = (function () {
   /* ================= 小孩 ================= */
 
   function kidUpdate(w, a, dt) {
+    /* 楼梯上撞见玩家：打个招呼（也提示"可以带上她"） */
+    var pl0 = w.state.player;
+    if (pl0 && pl0.alive && a.space === "stair" && pl0.space === "stair" &&
+        a.stair && pl0.stair && !a.__met && Math.abs(a.stair.t / a.stair.dur - pl0.stair.t / pl0.stair.dur) < 0.3) {
+      a.__met = true;
+      if (window.Audio2) Audio2.whisper(0.05);
+      w.addEvent(a.name + " 在楼梯上撞见了你（点她可以带上她）", "you", a.floor);
+    }
     var C = w.cfg, G = w.geom, now = w.state.time;
 
     if (a.space === "car") {

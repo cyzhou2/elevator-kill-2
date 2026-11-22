@@ -82,14 +82,8 @@ var Render = (function () {
     var p = World.player;
     var inCar = p && p.space === "car";
     var b;
-    if (inCar) {
-      /* 轿厢内：镜头推进轿厢，看得到面板 */
-      var e = World.carById(p.carId);
-      var car = (e && e.id === "D") ? g.elev.D.car : g.elev.C.car;
-      b = { x: car.x - 0.85, y: car.y - 0.45, w: car.w + 1.7, h: car.h + 0.9 };
-    } else {
-      b = { x: g.minX, y: g.viewMinY, w: g.width, h: g.viewHeight };
-    }
+    /* 统一用主视角（进轿厢也不推镜头） */
+    b = { x: g.minX, y: g.viewMinY, w: g.width, h: g.viewHeight };
     /* 竖屏也不再旋转画面：楼道永远是同一个朝向 */
     var rotate = false;
     var availW = W - (W < 640 ? 8 : 20), availH = H - (H < 640 ? 8 : 20);
@@ -495,12 +489,15 @@ var Render = (function () {
     var car = e.id === "D" ? g.elev.D.car : g.elev.C.car;
     var open = e.openAmt || 0;
 
-    /* 门关着：外面彻底看不见 */
+    /* 门关着：轿厢以外压黑（主视角下 = 屏幕四周全黑，只剩轿厢那块） */
     if (open < 0.12) {
       ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var c0 = w2s(car.x, car.y);
+      var c1 = w2s(car.x + car.w, car.y + car.h);
       ctx.beginPath();
-      ctx.rect(car.x - 40, car.y - 40, car.w + 80, car.h + 80);
-      ctx.rect(car.x, car.y, car.w, car.h);
+      ctx.rect(-10, -10, W + 20, H + 20);
+      ctx.rect(c0.x, c0.y, c1.x - c0.x, c1.y - c0.y);
       ctx.fillStyle = "rgba(1,2,2,0.995)";
       ctx.fill("evenodd");
       ctx.restore();
@@ -1169,6 +1166,21 @@ var Render = (function () {
         ctx.moveTo(cxx + 6, cyy - 3);
         ctx.lineTo(cxx + 9, cyy);
         ctx.lineTo(cxx + 6, cyy + 3);
+        ctx.stroke();
+      } else if (pr.icon === "kid") {
+        /* 小人 */
+        ctx.beginPath();
+        ctx.arc(cxx, cyy - 5, 3, 0, 6.283);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cxx, cyy - 2);
+        ctx.lineTo(cxx, cyy + 4);
+        ctx.moveTo(cxx - 4, cyy + 1);
+        ctx.lineTo(cxx + 4, cyy + 1);
+        ctx.moveTo(cxx, cyy + 4);
+        ctx.lineTo(cxx - 3, cyy + 9);
+        ctx.moveTo(cxx, cyy + 4);
+        ctx.lineTo(cxx + 3, cyy + 9);
         ctx.stroke();
       } else {
         /* 门 */

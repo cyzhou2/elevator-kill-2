@@ -150,7 +150,34 @@ KILLER.thinkSec: 0.22   // 决策间隔
 - 旋转已关闭：`render.js` 的 `layout()` 里 `var rotate = false;`（代码保留，想恢复改回去即可）。
 - 进轿厢时 JS 给 `<body>` 加 `inCar`（驼峰），CSS 里请用 `body.inCar`。
 
-## 0.6 电梯进主场景 / 楼梯改版 / 键位（v2.9）
+## 0.55 视角统一 / 自主修机 / 带上队友（v3.0）
+
+### 视角
+
+- `render.layout()` 里去掉了 inCar 的特写 bbox，统一用主场景 bbox；`drawCabinInScene` 仍按 `openAmt < 0.12` 把轿厢外压黑（用 `w2s` 换算屏幕矩形，`fill('evenodd')`）。
+
+### 修机时长
+
+```js
+OBJ.repairSec   = 30    // 玩家
+KID.repairSec   = 100   // 小孩（自主开工）
+KID.repairers   = 2     // 同时最多两人
+KID.repairWander= 0.18  // 分神概率
+```
+
+### 小孩自主开工
+
+- `kidRepair` 的目标筛选去掉了 `prog > 0.02` 的门槛（v2.8 的限制已取消）。
+- 并发计数改成「真的贴在未完成箱子上」才算，修完/放弃会清 `isRepairing`（之前标记会卡死，导致没人再修）。
+
+### 带上队友
+
+- `world.nearKid()`：同 space/同层/楼梯上进度差 < 0.28 且距离 < 2.2。
+- `world.rallyKid(k)`：`k.follow = true; k.followT = time + 100`。
+- `kidRepair` 开头先处理 follow：跟人 / 贴着玩家正在修的箱子加进度 / 玩家换层就跟着走楼梯。
+- 楼梯上 `prompts()` 只返回 kid 一条；`main.doAction` 在 `space==='stair'` 时优先 `rallyKid`，否则 `reverseStairs`。
+
+## 0.6 电梯进主场景 / 楼梯改版 / 键位（v2.9） / 楼梯改版 / 键位（v2.9）
 
 ### 轿厢渲染
 

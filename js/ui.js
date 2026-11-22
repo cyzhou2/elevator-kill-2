@@ -239,7 +239,8 @@ var UI = (function () {
       if (dd2 && dd2.broken) return "这扇门已经被它砸烂了";
       return dd2 && dd2.open ? "门开着 · 点图标拉上挡住它" : "门关着 · 点图标打开（它要砸 2 秒）";
     }
-    if (W.nearFuse && W.nearFuse()) return "点 <b>⚡ 图标</b> 或按 <b>E</b> 破译配电箱 · 声音会招来它";
+    if (W.nearKid && W.nearKid() && !W.nearKid().follow) return "撞见了队友 · <b>E</b> 带上她（会帮你修）";
+    if (W.nearFuse && W.nearFuse()) return "点 <b>⚡ 图标</b> 或按 <b>E</b> 破译配电箱（30 秒）· 声音会招来它";
     var g = W.geom;
     if (W.nearStairs && W.nearStairs()) return "楼梯间 · <b>Q</b> 上楼 · <b>E</b> 下楼（楼梯上一半也能掉头）";
     if (W.nearDoor && W.nearDoor()) {

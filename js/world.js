@@ -344,7 +344,20 @@ var World = (function () {
   function prompts() {
     var out = [];
     var p = W.player;
-    if (!p || !p.alive || p.space !== "floor") return out;
+    if (!p || !p.alive) return out;
+
+    /* 楼梯上：只有"带上小孩"这一个交互 */
+    if (p.space === "stair") {
+      var nkS = nearKid();
+      if (nkS && !nkS.follow) {
+        out.push({
+          kind: "kid", id: nkS.id, icon: "kid", label: "带上她一起走",
+          x: nkS.x, y: nkS.y - 0.5, near: true, progress: 0, active: false
+        });
+      }
+      return out;
+    }
+    if (p.space !== "floor") return out;
 
     /* 配电箱 */
     for (var i = 0; i < W.fuses.length; i++) {
@@ -372,6 +385,15 @@ var World = (function () {
           x: sp.x, y: sp.y - 0.6, near: ed < 1.15, progress: 0, active: false
         });
       }
+    }
+
+    /* 带上的小孩 */
+    var nk = nearKid();
+    if (nk && !nk.follow) {
+      out.push({
+        kind: "kid", id: nk.id, icon: "kid", label: "带上她一起走",
+        x: nk.x, y: nk.y - 0.5, near: true, progress: 0, active: false
+      });
     }
 
     /* 楼梯间门（板子） */
@@ -420,6 +442,11 @@ var World = (function () {
       endRound("escape");
       return true;
     }
+    if (kind === "kid") {
+      var nk2 = nearKid();
+      if (!nk2 || nk2.id !== id) return false;
+      return rallyKid(nk2);
+    }
     if (kind === "door") {
       var L2 = id === "B" ? "B" : "A";
       var dr2 = doorRect(p.floor, L2);
@@ -463,23 +490,68 @@ var World = (function () {
     var O = Cfg.OBJ || {}, K = Cfg.KID || {};
     if (allFusesDone()) return false;
 
+    /* 被你叫着走的小孩：先跟着你；你在修箱子时她就搭把手 */
+    if (a.follow && a.followT > W.time) {
+      var pl = W.player;
+      if (pl && pl.alive) {
+        if (pl.space === "floor" && pl.floor === a.floor) {
+          /* 你在修 → 贴着箱子一起修 */
+          if (W.repair && W.fuses[W.repair.index]) {
+            var pf = W.fuses[W.repair.index];
+            var pdd = dist(a.x, a.y, pf.x, pf.y);
+            if (pdd > 0.85) {
+              if (w.navGo) w.navGo(a, pf.x + 0.55, pf.y, dt, Cfg.KID.speed * 0.95);
+            } else {
+              pf.prog = Math.min(1, pf.prog + dt / (K.repairSec || 100) * 0.8);
+              a.face = Math.atan2(pf.y - a.y, pf.x - a.x);
+              if (pf.prog >= 1) completeFuse(pf, a.name);
+            }
+            return true;
+          }
+          /* 平时就跟在你身后 */
+          if (dist(a.x, a.y, pl.x, pl.y) > 1.6) {
+            if (w.navGo) w.navGo(a, pl.x, pl.y, dt, Cfg.KID.speed * 0.95);
+            return true;
+          }
+          return true;
+        }
+        /* 你换层了：她也跟过去 */
+        if (pl.space === "floor" && pl.floor !== a.floor) {
+          var Lf = (pl.x < G.L / 2) ? "A" : "B";
+          if (goStairZoneLate(w, a, Lf, dt, Cfg.KID.speed)) {
+            var df2 = pl.floor > a.floor ? 1 : -1;
+            if (!w.startStairs(a, Lf, df2)) w.startStairs(a, Lf, -df2);
+          }
+          return true;
+        }
+      }
+    }
+
+    /* 超过时间就不再跟了 */
+    if (a.follow && a.followT <= W.time) { a.follow = false; }
+
     /* 只接手"你已经动过的箱子"：小孩不敢自己开箱，但会帮你收尾 */
     var target = null, best = 1e9;
     for (var i = 0; i < W.fuses.length; i++) {
       var f = W.fuses[i];
-      if (f.done || f.prog <= 0.02) continue;
+      if (f.done) continue;
       var cost = Math.abs(f.floor - a.floor) * 3 + Math.abs(f.x - a.x) * 0.1;
       if (cost < best) { best = cost; target = f; }
     }
     if (!target) return false;
 
-    /* 最多同时两个小孩在修 */
+    /* 最多同时两个小孩在修：按"真的贴在某个没修完的箱子上"来数，避免标记卡死 */
     var maxW = (Cfg.KID && Cfg.KID.repairers) || 2;
     var assigned = 0;
     for (var wk = 0; wk < W.actors.length; wk++) {
       var aa = W.actors[wk];
       if (aa.kind !== "kid" || !aa.alive || aa.id === a.id) continue;
-      if (aa.isRepairing) assigned++;
+      if (!aa.isRepairing || aa.repairIdx == null) continue;
+      var af = W.fuses[aa.repairIdx];
+      if (!af || af.done) continue;
+      if (aa.floor !== af.floor) continue;
+      if (dist(aa.x, aa.y, af.x, af.y) > 1.1) continue;
+      assigned++;
     }
     var mine = W.fuses.indexOf(target);
     if (!(a.isRepairing && a.repairIdx === mine) && assigned >= maxW) return false;
@@ -532,7 +604,7 @@ var World = (function () {
     if (Math.floor(a.repairT * 1.2) !== Math.floor((a.repairT - dt) * 1.2)) {
       emitNoise(target.floor, target.x, target.y, (O.noiseRadius || 12) * 0.8, "repair");
     }
-    if (target.prog >= 1) completeFuse(target, a.name);
+    if (target.prog >= 1) { a.isRepairing = false; a.repairIdx = null; completeFuse(target, a.name); }
     return true;
   }
 
@@ -996,6 +1068,38 @@ var World = (function () {
         break;
       }
     }
+  }
+
+  /** 附近能搭话的小孩 */
+  function nearKid() {
+    var p = W.player;
+    if (!p || !p.alive) return null;
+    var best = null, bd = 1e9;
+    for (var i = 0; i < W.actors.length; i++) {
+      var k = W.actors[i];
+      if (k.kind !== "kid" || !k.alive) continue;
+      if (k.space !== p.space) continue;
+      if (k.space === "car" && k.carId !== p.carId) continue;
+      if (k.space === "floor" && k.floor !== p.floor) continue;
+      if (k.space === "stair") {
+        if (!p.stair || !k.stair) continue;
+        if (Math.abs(p.stair.t / p.stair.dur - k.stair.t / k.stair.dur) > 0.28) continue;
+      }
+      var d = dist(p.x, p.y, k.x, k.y);
+      if (d < 2.2 && d < bd) { bd = d; best = k; }
+    }
+    return best;
+  }
+
+  /** 叫她跟上（楼梯上/走廊里都行） */
+  function rallyKid(k) {
+    if (!k) return false;
+    k.followT = W.time + 100;
+    k.follow = true;
+    emitNoise(k.floor, k.x, k.y, 4, "talk");
+    if (window.Audio2) Audio2.whisper(0.05);
+    addEvent(k.name + " 跟上了你（会帮你一起修）", "you", k.floor);
+    return true;
   }
 
   /** 它开始/继续破门；返回 true 表示这一下把门破了 */
@@ -1536,7 +1640,7 @@ var World = (function () {
     nearExit: nearExit, exitSpots: exitSpots, nearExitSpot: nearExitSpot,
     playerUse: playerUse, boardOpenCar: boardOpenCar,
     prompts: prompts, promptAction: promptAction, breakDoor: breakDoor,
-    kidRepair: kidRepair, completeFuse: completeFuse,
+    kidRepair: kidRepair, completeFuse: completeFuse, nearKid: nearKid, rallyKid: rallyKid,
     panelVisible: panelVisible, canCall: canCall,
     get events() { return W.events; },
     get noises() { return W.noises; },

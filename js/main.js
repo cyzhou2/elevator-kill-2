@@ -52,6 +52,11 @@
 
     /* 正在走楼梯：只响应"换方向" */
     if (p.space === "stair") {
+      /* 楼梯上撞见小孩：先说话（E），再不然就是换方向 */
+      if ((a === "interact" || a === "interactUp") && World.nearKid && World.nearKid()) {
+        var nk3 = World.nearKid();
+        if (!nk3.follow) { World.rallyKid(nk3); return; }
+      }
       if (a === "interact" || a === "interactUp" || a === "interactDown" || a === "stairUp" || a === "stairDown") {
         var want = (a === "interactUp" || a === "stairUp") ? 1 : -1;
         World.reverseStairs(p, want);
