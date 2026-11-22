@@ -406,7 +406,7 @@ var World = (function () {
         return false;
       }
       if (!W.repair || W.repair.index !== idx) {
-        W.repair = { index: idx, t: f.prog * ((Cfg.OBJ && Cfg.OBJ.repairSec) || 6), noiseT: 0 };
+        W.repair = { index: idx, t: 0, noiseT: 0 };
         if (window.Audio2) Audio2.repair(true);
       }
       return true;
@@ -431,6 +431,111 @@ var World = (function () {
   }
 
   /** 每帧推进修理 */
+  /** ai.js 里的 goStairZone 在 world 这边也要能用 */
+  function goStairZoneLate(w2, a, L, dt, speed) {
+    if (typeof AI !== "undefined" && AI.goStairZone) return AI.goStairZone(w2, a, L, dt, speed);
+    var zone = L === "A" ? G.stairZoneA : G.stairZoneB;
+    var tx = zone.x + zone.w / 2, ty = zone.y + 0.6;
+    if (dist(a.x, a.y, tx, ty) < 0.75) return true;
+    if (w2.navGo) w2.navGo(a, tx, ty, dt, speed);
+    return dist(a.x, a.y, tx, ty) < 0.75;
+  }
+
+  /** 谁修满都走这里（玩家 / 小孩） */
+  function completeFuse(f, who) {
+    if (f.done) return;
+    f.done = true;
+    f.prog = 1;
+    W.power[f.floor] = true;
+    W.flash = 0.55;
+    if (window.Audio2) Audio2.powerOn();
+    addEvent((who === "you" ? "你修好了 " : (who || "队友") + "修好了 ") + f.floor + "F 的配电箱（" + fusesDone() + "/" + W.fuses.length + "）", "obj", f.floor);
+    emitNoise(f.floor, f.x, f.y, 8, "power");
+    if (W.repair && W.fuses[W.repair.index] === f) W.repair = null;
+    if (allFusesDone()) {
+      addEvent("全部恢复供电 —— 去 1F 大厅 或 顶层消防通道 离开（两处都行）", "obj", null);
+      if (window.Audio2) Audio2.ding(0.9);
+    }
+  }
+
+  /** 小孩修：往目标走，到了就往进度里加 */
+  function kidRepair(w, a, dt) {
+    var O = Cfg.OBJ || {}, K = Cfg.KID || {};
+    if (allFusesDone()) return false;
+
+    /* 只接手"你已经动过的箱子"：小孩不敢自己开箱，但会帮你收尾 */
+    var target = null, best = 1e9;
+    for (var i = 0; i < W.fuses.length; i++) {
+      var f = W.fuses[i];
+      if (f.done || f.prog <= 0.02) continue;
+      var cost = Math.abs(f.floor - a.floor) * 3 + Math.abs(f.x - a.x) * 0.1;
+      if (cost < best) { best = cost; target = f; }
+    }
+    if (!target) return false;
+
+    /* 最多同时两个小孩在修 */
+    var maxW = (Cfg.KID && Cfg.KID.repairers) || 2;
+    var assigned = 0;
+    for (var wk = 0; wk < W.actors.length; wk++) {
+      var aa = W.actors[wk];
+      if (aa.kind !== "kid" || !aa.alive || aa.id === a.id) continue;
+      if (aa.isRepairing) assigned++;
+    }
+    var mine = W.fuses.indexOf(target);
+    if (!(a.isRepairing && a.repairIdx === mine) && assigned >= maxW) return false;
+
+    /* 凶手就在这一层 → 不敢修，先躲/跑 */
+    for (var ki = 0; ki < W.actors.length; ki++) {
+      var kk = W.actors[ki];
+      if (!kk || kk.kind !== "killer" || !kk.alive) continue;
+      if (kk.space === "floor" && kk.floor === a.floor) return false;
+    }
+    if (a.chaseState || a.fleeUntil > W.time) return false;
+
+    if (a.repairIdx == null || W.fuses[a.repairIdx] !== target) {
+      a.repairIdx = W.fuses.indexOf(target);
+    }
+
+    if (a.floor !== target.floor) {
+      a.isRepairing = false;
+      /* 走楼梯过去 */
+      var L = target.x < G.L / 2 ? "A" : "B";
+      if (!a.repairL || a.repairL !== L) a.repairL = L;
+      if (goStairZoneLate(w, a, L, dt, Cfg.KID.speed)) {
+        var df = target.floor > a.floor ? 1 : -1;
+        if (!w.startStairs(a, L, df)) w.startStairs(a, L, -df);
+      }
+      return true;
+    }
+
+    /* 同层：走过去 */
+    var dd = dist(a.x, a.y, target.x, target.y);
+    if (dd > (O.touchDist || 1.0)) {
+      a.isRepairing = false;
+      if (w.navGo) w.navGo(a, target.x + 0.55, target.y, dt, Cfg.KID.speed * 0.95);
+      return true;
+    }
+    a.isRepairing = true;
+    a.repairIdx = mine;
+
+    /* 到了：一边修一边会分神 */
+    a.repairT = (a.repairT || 0) + dt;
+    target.prog = Math.min(1, target.prog + dt / (K.repairSec || 11));
+    a.face = Math.atan2(target.y - a.y, target.x - a.x);
+    if (Math.random() < dt * (K.repairWander || 0.22)) {
+      a.repairT = 0;
+      a.repairIdx = null;
+      a.isRepairing = false;
+      a.wander = null;
+      a.restUntil = W.time + rnd(0.8, 2.2);
+    }
+    if (Math.floor(a.repairT * 1.2) !== Math.floor((a.repairT - dt) * 1.2)) {
+      emitNoise(target.floor, target.x, target.y, (O.noiseRadius || 12) * 0.8, "repair");
+    }
+    if (target.prog >= 1) completeFuse(target, a.name);
+    return true;
+  }
+
   function updateRepair(dt) {
     var O = Cfg.OBJ || {};
     var p = W.player;
@@ -449,20 +554,8 @@ var World = (function () {
       if (window.Audio2) Audio2.repair(true);
     }
 
-    f.prog = Math.min(1, W.repair.t / (O.repairSec || 6));
-    if (f.prog >= 1) {
-      f.done = true;
-      W.repair = null;
-      W.power[f.floor] = true;
-      W.flash = 0.55;
-      if (window.Audio2) Audio2.powerOn();
-      addEvent("你修好了 " + f.floor + "F 的配电箱（" + fusesDone() + "/" + W.fuses.length + "）", "obj", f.floor);
-      emitNoise(f.floor, f.x, f.y, 8, "power");
-      if (allFusesDone()) {
-        addEvent("全部恢复供电 —— 去 1F 大厅 或 顶层消防通道 离开（两处都行）", "obj", null);
-        if (window.Audio2) Audio2.ding(0.9);
-      }
-    }
+    f.prog = Math.min(1, f.prog + dt / (O.repairSec || 6));
+    if (f.prog >= 1) completeFuse(f, "you");
   }
 
   /** 玩家按"用"：修配电箱 / 按紧急按钮 */
@@ -1402,6 +1495,7 @@ var World = (function () {
     nearExit: nearExit, exitSpots: exitSpots, nearExitSpot: nearExitSpot,
     playerUse: playerUse, boardOpenCar: boardOpenCar,
     prompts: prompts, promptAction: promptAction, breakDoor: breakDoor,
+    kidRepair: kidRepair, completeFuse: completeFuse,
     panelVisible: panelVisible, canCall: canCall,
     get events() { return W.events; },
     get noises() { return W.noises; },

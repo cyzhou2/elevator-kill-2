@@ -76,6 +76,12 @@ var AI = (function () {
     }
     a.fleeL = null;
 
+    /* 去修配电箱（队友该干的事） */
+    if (w.kidRepair && w.kidRepair(w, a, dt)) {
+      a.aiState = "repair";
+      return;
+    }
+
     /* 换层计划 */
     if (a.goalFloor != null) {
       if (a.floor === a.goalFloor) {
